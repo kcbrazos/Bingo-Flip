@@ -1,0 +1,1 @@
+function e(e,t){return e===`prep`||e===`battle`||e===`finished`}export{e as t};

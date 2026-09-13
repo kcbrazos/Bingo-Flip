@@ -1,0 +1,1 @@
+function e(e,t,n=8,r=1){if(e.w<=0||e.h<=0||t.w<=0||t.h<=0)return 1;let i=Math.max(1,t.w-n*2),a=Math.max(1,t.h-n*2);return Math.min(r,i/e.w,a/e.h)}export{e as t};

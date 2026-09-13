@@ -1,0 +1,1 @@
+var e=1e3;function t(e,t,n){return e<=t?(t-e)/2:Math.min(0,Math.max(t-e,t/2-n*e))}export{t as n,e as t};

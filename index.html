@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <!-- The same mark at 180px, rendered from favicon.svg rather than drawn a second time - iOS
+         ignores SVG favicons outright, and Android Chrome falls back to apple-touch-icon when
+         there's no web manifest, so this one file is the only icon a phone ever sees. Regenerate it
+         with: npx sharp-cli -i public/favicon.svg -o public/apple-touch-icon.png resize 180 180 -->
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bingo Flip</title>
+
+    <!-- Link-unfurl card. The room code IS the invite mechanism, so these links get pasted into
+         Discord and Twitch chat constantly; without these tags they unfurl as a bare gray URL.
+         Note the values are deliberately generic: HashRouter keeps the room code after the "#",
+         which browsers never send to the server, so a crawler fetching a room link sees exactly
+         the same HTML as the home page. Per-room previews would need server-side rendering. -->
+    <meta name="description" content="Lockout bingo with a twist: a few squares flip the whole board onto a different set of objectives." />
+    <meta name="theme-color" content="#06121b" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Bingo Flip" />
+    <meta property="og:title" content="Bingo Flip" />
+    <meta property="og:description" content="Lockout bingo with a twist: a few squares flip the whole board onto a different set of objectives." />
+    <meta property="og:url" content="https://kcbrazos.github.io/Bingo-Flip/" />
+    <!-- Absolute URL, unlike the icon above: Vite rewrites the base into href/src attributes when
+         it processes this file, but never into a meta content attribute - and a crawler on another
+         host has nothing to resolve a relative path against anyway.
+         1200x630 is the size Discord, Twitter and Slack all crop toward, and the card is drawn on
+         an opaque plate rather than shipped transparent, since an unfurl lands on whatever
+         background the client uses and the logo's glow disappears against a light one. -->
+    <meta property="og:image" content="https://kcbrazos.github.io/Bingo-Flip/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Bingo Flip" />
+    <!-- summary_large_image, not summary: with a card this wide the small variant crops it to a
+         square thumbnail and takes the wordmark's ends off with it. -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Bingo Flip" />
+    <meta name="twitter:description" content="Lockout bingo with a twist: a few squares flip the whole board onto a different set of objectives." />
+    <meta name="twitter:image" content="https://kcbrazos.github.io/Bingo-Flip/og-card.png" />
+    <script type="module" crossorigin src="./assets/index-Cnvm7K3Y.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-3xJ7hrZY.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
