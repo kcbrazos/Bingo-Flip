@@ -188,6 +188,21 @@
   text-transform: uppercase;
 }
 
+/* A caster peeking at the other face - see the note in OverlayBoard.tsx. Left corner, opposite the
+   stale badge, so the two can never be confused for one another if they're ever both up. */
+.ovb-peek {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(20, 60, 90, 0.85);
+  color: #dff0ff;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 /* ?debug=1 readout. Deliberately loud and ugly - it is not meant to be left on. */
 .ovb-debug {
   position: absolute;

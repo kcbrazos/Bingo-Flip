@@ -12,6 +12,8 @@ import { cellOwners } from "../lib/cellVisuals";
 import { fitScale } from "../lib/overlayFit";
 import { readOpacity } from "../lib/overlayCast";
 import { readTextSize } from "../lib/overlayText";
+import { useFlipOdds } from "../hooks/useFlipOdds";
+import { OddsPanel } from "../components/OddsPanel";
 import "./Overlay.css";
 import "./OverlayTimer.css";
 
@@ -43,6 +45,17 @@ export function OverlayTimer() {
   const phase = useBattleClock(state.claims, state.room);
   const [frameRef, frame] = useBoxSize<HTMLDivElement>();
   const [barRef, bar] = useBoxSize<HTMLDivElement>();
+  /**
+   * `?odds=1` folds the evaluation bar in under the clock - the caster's answer for a scorebug that
+   * wants the win-probability reading permanently attached rather than brought up as its own source.
+   * See pages/OverlayOdds for the standalone version, which also carries the history line this one
+   * deliberately doesn't (a scorebug is a corner of the screen, not a place to read a graph).
+   *
+   * Called unconditionally, ahead of the room guard below - a hook cannot be called only sometimes,
+   * so `enabled` is how this says "don't bother" without skipping the call. See useFlipOdds.
+   */
+  const showOdds = params.get("odds") === "1";
+  const { snapshot: odds } = useFlipOdds(state.claims, state.room, state.players, false, showOdds);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -121,19 +134,32 @@ export function OverlayTimer() {
 
   return (
     <div className="ovt" ref={frameRef}>
-      <div className="ovt-bar" ref={barRef} style={{ transform: `translate(-50%, -50%) scale(${scale})`, opacity }}>
-        {showTeams && <div className="ovt-side ovt-left">{side(left)}</div>}
+      {/* The measured, centred and scaled unit is this stack, not the bar alone - `?odds=1` adds a
+          second row underneath, and the two have to grow and shrink together or the odds band
+          would scale against a size fitScale never actually measured. */}
+      <div className="ovt-stack" ref={barRef} style={{ transform: `translate(-50%, -50%) scale(${scale})`, opacity }}>
+        <div className="ovt-bar">
+          {showTeams && <div className="ovt-side ovt-left">{side(left)}</div>}
 
-        <div className="ovt-clock">
-          <span className="ovt-phase">{phase ? PHASE_LABEL[phase.phase] : "Match"}</span>
-          <span className="ovt-time">{clock}</span>
-          {/* Under the clock rather than beside a team, because the face belongs to the BOARD and
-              not to anybody on it - and because a viewer glancing at a scorebug in the corner needs
-              to know which board the numbers either side of it belong to. */}
-          <OverlayFaceBadge face={state.face} flipsLeft={flipsLeft} />
+          <div className="ovt-clock">
+            <span className="ovt-phase">{phase ? PHASE_LABEL[phase.phase] : "Match"}</span>
+            <span className="ovt-time">{clock}</span>
+            {/* Under the clock rather than beside a team, because the face belongs to the BOARD and
+                not to anybody on it - and because a viewer glancing at a scorebug in the corner needs
+                to know which board the numbers either side of it belong to. */}
+            <OverlayFaceBadge face={state.face} flipsLeft={flipsLeft} />
+          </div>
+
+          {showTeams && <div className="ovt-side ovt-right">{side(right)}</div>}
         </div>
 
-        {showTeams && <div className="ovt-side ovt-right">{side(right)}</div>}
+        {/* Opacity and scale already live on the stack, so the panel underneath takes neither -
+            doubling either up would fade or shrink it twice. */}
+        {showOdds && (
+          <div className="ovt-odds">
+            <OddsPanel snapshot={odds} points={[]} elapsed={clock} showGraph={false} />
+          </div>
+        )}
       </div>
     </div>
   );

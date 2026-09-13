@@ -245,6 +245,16 @@ export interface Room {
   flip_cells?: number[] | null;
   /** When the match clock started. Null in the lobby. Every client's clock reads this one instant. */
   started_at?: string | null;
+  /**
+   * When the match was actually paused. Null while running.
+   *
+   * Every phase is computed from `started_at` and the current instant (see matchTime.ts), so
+   * pausing needs no separate "paused elapsed" bookkeeping: resuming just slides `started_at`
+   * forward by however long this was set, and every client's clock is correct again for free.
+   */
+  paused_at?: string | null;
+  /** Teams currently asking for the match to pause (or, while paused, still asking to stay that way). */
+  pause_votes?: number[] | null;
 }
 
 export interface Player {

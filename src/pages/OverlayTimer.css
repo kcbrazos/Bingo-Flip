@@ -17,17 +17,34 @@
 }
 
 /* Centred on the source, then scaled about that centre. Absolute so the transform can't disturb
-   any layout around it. */
-.ovt-bar {
+   any layout around it. Carries the measurement fitScale sizes against - see the note in
+   OverlayTimer.tsx on why that has to be this box and not .ovt-bar alone once ?odds=1 adds a
+   second row underneath. */
+.ovt-stack {
   position: absolute;
   left: 50%;
   top: 50%;
   transform-origin: center center;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  white-space: nowrap;
+}
+
+.ovt-bar {
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 2rem;
-  white-space: nowrap;
+}
+
+/* The evaluation bar, folded into the scorebug by ?odds=1 - see components/OddsPanel. Sized as a
+   fixed box rather than measured: .ovo-fit fills whatever it's given, and this is the one thing
+   that has to give it something. */
+.ovt-odds {
+  width: 620px;
+  height: 170px;
 }
 
 .ovt-side {

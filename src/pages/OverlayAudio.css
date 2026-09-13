@@ -1,0 +1,17 @@
+/* Only ever seen in an OBS preview, never on the actual stream a viewer watches - see the note in
+   OverlayAudio.tsx on why a silent source still needs something to look at when it's broken. */
+.ova-blocked {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  text-align: center;
+  background: rgba(120, 20, 20, 0.85);
+  color: #ffd9d9;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  border: none;
+  cursor: pointer;
+}

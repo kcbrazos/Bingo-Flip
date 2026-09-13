@@ -1,10 +1,11 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { HashRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Home } from "./pages/Home";
 import { TopBar } from "./components/TopBar";
 import { BuildStamp } from "./components/BuildStamp";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LoadingScreen } from "./components/BrandMark";
+import { primeAudio } from "./lib/sfx";
 
 /**
  * Fetched on demand rather than baked into the bundle everything else loads.
@@ -29,6 +30,9 @@ const Overlay = lazy(() => import("./pages/Overlay").then((m) => ({ default: m.O
 const OverlayBoard = lazy(() => import("./pages/OverlayBoard").then((m) => ({ default: m.OverlayBoard })));
 const OverlayTimer = lazy(() => import("./pages/OverlayTimer").then((m) => ({ default: m.OverlayTimer })));
 const OverlayKey = lazy(() => import("./pages/OverlayKey").then((m) => ({ default: m.OverlayKey })));
+const OverlayAudio = lazy(() => import("./pages/OverlayAudio").then((m) => ({ default: m.OverlayAudio })));
+const OverlayOdds = lazy(() => import("./pages/OverlayOdds").then((m) => ({ default: m.OverlayOdds })));
+const OverlayScreen = lazy(() => import("./pages/OverlayScreen").then((m) => ({ default: m.OverlayScreen })));
 const CasterControl = lazy(() => import("./pages/CasterControl").then((m) => ({ default: m.CasterControl })));
 const Admin = lazy(() => import("./pages/Admin").then((m) => ({ default: m.Admin })));
 const Stats = lazy(() => import("./pages/Stats").then((m) => ({ default: m.Stats })));
@@ -40,10 +44,51 @@ const Stats = lazy(() => import("./pages/Stats").then((m) => ({ default: m.Stats
  * The caster's CONTROL page is deliberately not in this list - it is an ordinary page on a second
  * monitor, and wants the top bar like anything else.
  */
-const OVERLAY_ROUTES = ["/overlay/", "/overlay-board/", "/overlay-timer/", "/overlay-key/"];
+const OVERLAY_ROUTES = [
+  "/overlay/",
+  "/overlay-board/",
+  "/overlay-timer/",
+  "/overlay-key/",
+  "/overlay-audio/",
+  "/overlay-odds/",
+  "/overlay-screen/",
+];
+
+/**
+ * Unlocks match audio on the first click or key press anywhere in the app, rather than waiting for
+ * one to land inside whichever handler happens to call playSfx() first.
+ *
+ * Every sound Room.tsx plays (useMatchSfx) fires from an effect reacting to a realtime row or a
+ * countdown tick, never from inside a click handler directly - even "mark", for the player whose own
+ * claim caused it, only lands once the round trip to Supabase resolves. Chrome autoplay tolerates
+ * that fine once a page has seen any gesture at all, but Safari's policy is narrower: it wants the
+ * gesture and the play() in the same call stack, and a click that only unlocked audio a tick later is
+ * as good as no click at all. primeAudio()'s probe play, run synchronously inside this listener,
+ * IS that gesture - Safari counts it and stays unlocked for every later, ungestured play() this page
+ * makes, which is the same trick pages/OverlayAudio already uses for a source with no click of its
+ * own to spend.
+ *
+ * Fires once and tears itself down; a page nobody has clicked has made no sound yet to be missing.
+ */
+function useUnlockAudioOnFirstGesture(): void {
+  useEffect(() => {
+    const unlock = () => {
+      void primeAudio();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+}
 
 function Chrome() {
   const { pathname } = useLocation();
+  useUnlockAudioOnFirstGesture();
   if (OVERLAY_ROUTES.some((prefix) => pathname.startsWith(prefix))) return null;
   return (
     <>
@@ -72,6 +117,9 @@ function App() {
           <Route path="/overlay-board/:code" element={<OverlayBoard />} />
           <Route path="/overlay-timer/:code" element={<OverlayTimer />} />
           <Route path="/overlay-key/:code" element={<OverlayKey />} />
+          <Route path="/overlay-audio/:code" element={<OverlayAudio />} />
+          <Route path="/overlay-odds/:code" element={<OverlayOdds />} />
+          <Route path="/overlay-screen/:code" element={<OverlayScreen />} />
           <Route path="/cast/:code" element={<CasterControl />} />
           <Route path="/stats" element={<Stats />} />
           {/* Guarded inside the page, not here - the route has to exist for everyone so that an

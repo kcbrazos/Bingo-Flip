@@ -3,6 +3,7 @@ import {
   matchStartedAt,
   battlePhaseAt,
   matchTimings,
+  effectiveNow,
   type BattlePhaseInfo,
   type BattlePhaseName,
 } from "../lib/matchTime";
@@ -107,7 +108,11 @@ export function useBattleClock(claims: Claim[], room?: Room | null): BattlePhase
   // The snapshot is the raw millisecond reading - a number, so React can compare it - and the phase
   // is derived from it during render. Returning the BattlePhaseInfo object from getSnapshot instead
   // would hand React a fresh object identity on every call, which it reads as "changed" forever.
-  const getNow = useCallback(() => (running ? now : 0), [running]);
+  // Paused freezes at the instant pausing took effect rather than at whatever `now` last ticked to -
+  // otherwise the display would keep counting for the fraction of a second before the next tick
+  // caught up, and every render in between would show a clock that is still moving.
+  const pausedAt = room?.paused_at ?? null;
+  const getNow = useCallback(() => (running ? effectiveNow({ paused_at: pausedAt }, now) : 0), [running, pausedAt]);
   const nowMs = useSyncExternalStore(running ? subscribe : subscribeNever, getNow, getNow);
 
   return battlePhaseAt(startedAt, nowMs, matchTimings(room));
@@ -124,16 +129,20 @@ export function useBattlePhaseName(claims: Claim[], room?: Room | null): BattleP
   const startedAt = matchStartedAt(room, claims);
   const running = startedAt !== null;
   const { starting, matchBeginsAt } = matchTimings(room);
+  const pausedAt = room?.paused_at ?? null;
 
   // Depends on the timing NUMBERS rather than the object matchTimings builds fresh each render -
   // an unstable getSnapshot identity would make useSyncExternalStore resubscribe every render.
   const getPhase = useCallback(
     () =>
       startedAt
-        ? (battlePhaseAt(startedAt, now, { starting, matchBeginsAt, preparation: matchBeginsAt - starting })
-            ?.phase ?? null)
+        ? (battlePhaseAt(
+            startedAt,
+            effectiveNow({ paused_at: pausedAt }, now),
+            { starting, matchBeginsAt, preparation: matchBeginsAt - starting }
+          )?.phase ?? null)
         : null,
-    [startedAt, starting, matchBeginsAt]
+    [startedAt, starting, matchBeginsAt, pausedAt]
   );
 
   return useSyncExternalStore(running ? subscribe : subscribeNever, getPhase, getPhase);

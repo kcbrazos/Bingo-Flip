@@ -3,6 +3,9 @@ import { supabase } from "./supabase";
 export interface Profile {
   id: string;
   twitch_id: string | null;
+  /** The channel login an embedded Twitch player takes - see lib/castScreens. Null on an account
+   * that has never signed in with Twitch, or one that signed in before this column existed. */
+  twitch_login: string | null;
   display_name: string;
   /** The player's own choice of name. Null means they've never set one - show display_name. */
   nickname: string | null;

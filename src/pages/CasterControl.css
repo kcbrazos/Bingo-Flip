@@ -263,6 +263,55 @@
   font-size: 0.75rem;
 }
 
+.cast-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* While armed, the monitor's cursor says "point", not "drag" - the gesture still does both, but
+   the affordance should lead with the one a caster reaches for the toggle to get. */
+.cast-spotting {
+  cursor: crosshair;
+}
+
+.cast-screens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.35rem;
+}
+
+.cast-screen-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.76rem;
+}
+
+.cast-screen-name {
+  font-weight: 700;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cast-screen-lat {
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.cast-screen-resync {
+  flex: none;
+  font-size: 0.68rem;
+  padding: 0.1rem 0.4rem;
+}
+
 /**
  * The 1:1 monitor: a real 1000x1000 viewport, scaled down for the screen.
  *

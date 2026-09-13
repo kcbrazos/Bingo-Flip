@@ -53,6 +53,24 @@ export interface CastView {
   opacity: number;
   /** Hide the board entirely without tearing the source out of the scene. */
   visible: boolean;
+  /**
+   * The square(s) the caster is pointing at, and in what colour - a stream viewer cannot follow a
+   * finger on a monitor, so "the one at D7" otherwise has no picture attached to it.
+   *
+   * Null when nothing is lit. `spotColor` null draws the ring in the default glow colour rather
+   * than a team's - see the desk's spotlight section, which never needs to name a team.
+   */
+  spot: number[] | null;
+  spotColor: string | null;
+  /**
+   * Which face's objectives the board draws, overriding the match's real one - a caster "peeking"
+   * at the side nobody is playing on yet, to talk through what a flip is about to turn into.
+   *
+   * Null follows the match (`state.face`), which is what every source defaults to. Nothing on a
+   * bingo board is hidden (see the note on `mode` above), so a peek is safe to put on stream - it
+   * changes only which NAMES are drawn on unclaimed squares, never who owns what.
+   */
+  previewFace: 0 | 1 | null;
 }
 
 /** How faint a source may be made before "hidden" is the honest word for it. */
@@ -90,6 +108,9 @@ export const DEFAULT_VIEW: CastView = {
   coords: true,
   opacity: 1,
   visible: true,
+  spot: null,
+  spotColor: null,
+  previewFace: null,
 };
 
 /**

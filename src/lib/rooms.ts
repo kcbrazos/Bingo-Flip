@@ -359,10 +359,28 @@ export async function startBattle(room: Room): Promise<void> {
     room.seed
   );
 
-  const { error } = await supabase
-    .from("rooms")
-    .update({ flip_cells: flipCells, started_at: new Date().toISOString(), status: "battle" })
-    .eq("id", room.id);
+  const patch: Record<string, unknown> = {
+    flip_cells: flipCells,
+    started_at: new Date().toISOString(),
+    status: "battle",
+    // Cleared rather than assumed empty: a rematch reuses this room row, and a match that ended
+    // mid-pause (the host used "End match" instead of resuming first) would otherwise open the
+    // next one already paused.
+    paused_at: null,
+    pause_votes: [],
+  };
+  const { error } = await supabase.from("rooms").update(patch).eq("id", room.id);
+
+  // Pre-migration rooms don't have these columns yet; opening the match still matters more than
+  // clearing a pause state that column's own absence proves can't exist. Same fallback shape as
+  // setPlayerTeam's team_joined_at retry above.
+  if (error && /paused_at|pause_votes/i.test(error.message)) {
+    delete patch.paused_at;
+    delete patch.pause_votes;
+    const { error: retry } = await supabase.from("rooms").update(patch).eq("id", room.id);
+    if (retry) throw retry;
+    return;
+  }
   if (error) throw error;
 }
 
@@ -379,6 +397,56 @@ export async function beginPrepPhase(roomId: string): Promise<void> {
 
   const { error: readyErr } = await supabase.from("team_ready").delete().eq("room_id", roomId);
   if (readyErr) throw readyErr;
+}
+
+/**
+ * Asks (or un-asks) for the match to pause, on behalf of the calling player's team.
+ *
+ * A vote, not a command: pausing and resuming both need every active team to agree, the same
+ * unanimity the readiness gate uses, so a request array is what's written to rather than a request
+ * that immediately takes effect. Room.tsx watches this alongside the room and has the host flip
+ * `paused_at` once the votes line up in either direction - see pauseMatch and resumeMatch below.
+ *
+ * Goes through an RPC rather than a plain update because two teams voting at once would otherwise
+ * race a read-modify-write on the same array and one could silently overwrite the other's vote.
+ */
+export async function requestPause(roomId: string, team: number, want: boolean): Promise<void> {
+  const { error } = await supabase.rpc("request_pause", {
+    p_room_id: roomId,
+    p_team: team,
+    p_want: want,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Actually pauses the match. Called only once every active team's vote is in - see the effect in
+ * Room.tsx - and only by the host's client, same as startBattle: `paused_at` is one of the columns
+ * every client's clock is anchored to, and guard_match_open refuses this write from anyone else.
+ */
+export async function pauseMatch(roomId: string): Promise<void> {
+  const { error } = await supabase.from("rooms").update({ paused_at: new Date().toISOString() }).eq("id", roomId);
+  if (error) throw error;
+}
+
+/**
+ * Un-pauses the match by sliding `started_at` forward by however long it sat paused.
+ *
+ * That's the entire resume: every phase is computed from `started_at` and the current instant (see
+ * matchTime.ts), so a match that was 90 seconds into its preparation countdown when it paused is
+ * still exactly 90 seconds in the moment it resumes, no matter how long the pause itself lasted.
+ * `pause_votes` is cleared in the same statement so the next pause starts from nobody having asked.
+ */
+export async function resumeMatch(room: Room): Promise<void> {
+  if (!room.paused_at || !room.started_at) return;
+  const pausedMs = Date.now() - new Date(room.paused_at).getTime();
+  const shiftedStart = new Date(new Date(room.started_at).getTime() + Math.max(0, pausedMs)).toISOString();
+
+  const { error } = await supabase
+    .from("rooms")
+    .update({ started_at: shiftedStart, paused_at: null, pause_votes: [] })
+    .eq("id", room.id);
+  if (error) throw error;
 }
 
 /**
@@ -478,16 +546,25 @@ export async function resetRoomToLobby(roomId: string, activeTeamsList: number[]
   // The flip squares are cleared in the same breath, and must be: they are frozen while the room is
   // out of the lobby, and the next match's are a different set (they are seeded off the new seed).
   // Clearing them here is what lets startBattle write them again.
-  const { error: roomErr } = await supabase
-    .from("rooms")
-    .update({
-      status: "lobby",
-      winner_team: null,
-      seed: generateSeed(),
-      flip_cells: [],
-      started_at: null,
-    })
-    .eq("id", roomId);
+  const roomPatch: Record<string, unknown> = {
+    status: "lobby",
+    winner_team: null,
+    seed: generateSeed(),
+    flip_cells: [],
+    started_at: null,
+    paused_at: null,
+    pause_votes: [],
+  };
+  const { error: roomErr } = await supabase.from("rooms").update(roomPatch).eq("id", roomId);
+
+  // Pre-migration rooms don't have these columns - see the matching fallback in startBattle.
+  if (roomErr && /paused_at|pause_votes/i.test(roomErr.message)) {
+    delete roomPatch.paused_at;
+    delete roomPatch.pause_votes;
+    const { error: retry } = await supabase.from("rooms").update(roomPatch).eq("id", roomId);
+    if (retry) throw retry;
+    return;
+  }
   if (roomErr) throw roomErr;
 }
 

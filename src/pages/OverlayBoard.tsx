@@ -5,6 +5,7 @@ import { useBoxSize } from "../hooks/useBoxSize";
 import { activeTeams } from "../lib/teams";
 import { cellVisuals, cellOwners } from "../lib/cellVisuals";
 import { facesForRoom } from "../lib/challenges";
+import { FACE_LABELS } from "../types/bingoFlip";
 import { teamHex } from "../lib/teamColors";
 import { BoardGrid, type CellVisual } from "../components/BoardGrid";
 import {
@@ -182,7 +183,12 @@ export function OverlayBoard() {
   const revealed = squaresRevealed(room.status, battlePhase);
   const teams = activeTeams(state.players);
   const faces = facesForRoom(room.id, boardSize * boardSize, room.square_set, room.seed, room.custom_square_set);
-  const challenges = state.face === 0 ? faces.light : faces.dark;
+  // A caster's peek outranks the match's real face for which NAMES are drawn - see `previewFace`
+  // on CastView. Ownership below is untouched: a peek changes what an unclaimed square is called,
+  // never who holds it.
+  const shownFace = view.previewFace ?? state.face;
+  const challenges = shownFace === 0 ? faces.light : faces.dark;
+  const peeking = view.previewFace !== null && view.previewFace !== state.face;
   const shown = typeof view.mode === "number" ? teams.filter((t) => t === view.mode) : teams;
 
   /**
@@ -237,7 +243,7 @@ export function OverlayBoard() {
       <div
         className="ovb-stage"
         ref={stageRef}
-        data-face={state.face}
+        data-face={shownFace}
         style={{
           left: placeBoard(stage.w, frame.w, view.cx),
           top: placeBoard(stage.h, frame.h, view.cy),
@@ -253,6 +259,8 @@ export function OverlayBoard() {
           // cannot say whose shot a square was is only half a board, and it is not a setting anybody
           // would want to reach for mid-match. See attackerTeamsByCell.
           ringedBy={ringedBy}
+          spotCells={view.spot ? new Set(view.spot) : undefined}
+          spotColor={view.spotColor ?? undefined}
 
           // All four edges: a viewer can't point at the screen, and on a zoomed board the top-left
           // labels are often outside the frame entirely.
@@ -281,6 +289,11 @@ export function OverlayBoard() {
           looks live is the failure that actually costs a caster something, and the person who can
           fix it is the one looking at the stream. */}
       {stale && <div className="ovb-stale">board control disconnected</div>}
+
+      {/* A peek is a real change to what's on stream, so it says so on stream - a viewer who has
+          been watching the Light side must not read a Dark-side square as the board having turned.
+          See `previewFace` on CastView. */}
+      {peeking && <div className="ovb-peek">peek - {FACE_LABELS[shownFace]} side</div>}
 
       {/*
         ?debug=1 - the numbers this layout is actually built from.

@@ -475,6 +475,45 @@
   pointer-events: none;
 }
 
+/**
+ * The caster's spotlight - a dashed, pulsing ring so it reads as a POINTER rather than as an
+ * ownership mark, even sitting on a square nobody has claimed. Same masked-box technique as
+ * .bg-claim-ring (a border can't dash evenly around a masked shape the way an outline can, and a
+ * plain `border` would be a hairline at one board size and a slab at another).
+ *
+ * `--bg-spot` defaults to the board's glow rather than any team colour - a spotlight doesn't have
+ * to belong to anybody, and most of the time it doesn't.
+ */
+.bg-spot-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  padding: max(2px, 8%);
+  background: var(--bg-spot, var(--board-glow, #d9a441));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: bg-spot-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes bg-spot-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bg-spot-ring {
+    animation: none;
+    opacity: 0.9;
+  }
+}
+
 /* Right-click pencil mark: a client-local "I reckon something's here" pin. Deliberately reads
    as an annotation rather than a result, so it can't be confused with a real hit. */
 /**

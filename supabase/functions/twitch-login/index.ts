@@ -193,6 +193,7 @@ Deno.serve(async (req) => {
       {
         id: caller.id,
         twitch_id: metadata.twitch_id,
+        twitch_login: metadata.twitch_login,
         display_name: metadata.display_name,
         avatar_url: metadata.avatar_url,
         // Only written when there is one to carry across a reclaim. Omitting it keeps the column

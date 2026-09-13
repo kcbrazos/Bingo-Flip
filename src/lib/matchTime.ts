@@ -75,6 +75,19 @@ export interface BattlePhaseInfo {
   matchElapsed: number;
 }
 
+/**
+ * The instant a phase calculation should treat as "now".
+ *
+ * While a room is paused every phase freezes exactly where it stood: the countdown stops ticking
+ * down and the match clock stops ticking up, because both are plain functions of `started_at` and
+ * this value. Resuming doesn't need to unfreeze anything here - it slides `started_at` itself
+ * forward (see pauseMatch/resumeMatch in lib/rooms.ts), so the very next tick after a resume already
+ * reads the correct elapsed time without this function's help.
+ */
+export function effectiveNow(room: { paused_at?: string | null } | null | undefined, nowMs: number): number {
+  return room?.paused_at ? new Date(room.paused_at).getTime() : nowMs;
+}
+
 export function battlePhaseAt(
   startedAt: string | null,
   nowMs: number,

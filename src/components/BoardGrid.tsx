@@ -167,6 +167,18 @@ interface BoardGridProps {
    * own - see OverlayBoard.
    */
   maxCellFont?: number;
+  /**
+   * Squares the caster is pointing at - a stream viewer cannot follow a finger on a monitor, so
+   * this is the picture "the one at D7" is otherwise missing. See CasterControl's spotlight
+   * section and lib/overlayCast's `spot`/`spotColor`.
+   *
+   * Deliberately its own ring rather than reusing `ringedBy`: that one answers "whose square is
+   * this", drawn from the match itself, while a spotlight is the caster's own pointer and has to
+   * read as a different kind of mark even on a square nobody has claimed.
+   */
+  spotCells?: ReadonlySet<number>;
+  /** Defaults to the board's own glow colour - a spotlight doesn't have to belong to a team. */
+  spotColor?: string;
 }
 
 const COL_LETTERS = "ABCDEFGHIJKLMNOPQR";
@@ -252,6 +264,8 @@ export function BoardGrid({
   ringedBy,
   textBoost = 1,
   maxCellFont,
+  spotCells,
+  spotColor,
 }: BoardGridProps) {
   // Numbers keep the original "percentage of the viewport" shorthand; strings pass through as raw
   // CSS so a caller can subtract fixed page chrome with calc().
@@ -643,6 +657,7 @@ export function BoardGrid({
     // built from resolved shots - but it earns its own place in the test rather than leaning on that,
     // so the ring can never be the one thing on a square with no layer to draw it in.
     const fired = ringedBy?.get(i);
+    const spotted = spotCells?.has(i) ?? false;
     const annotated =
       resolved ||
       flippable ||
@@ -650,7 +665,8 @@ export function BoardGrid({
       Boolean(ruled) ||
       cellCounts.length > 0 ||
       holding ||
-      Boolean(fired?.length);
+      Boolean(fired?.length) ||
+      spotted;
     // Darken cells to the left of the hovered cell in its row, and above it in its column,
     // to draw the eye out to the row/column labels along the board's edges.
     const axisShadow =
@@ -784,6 +800,15 @@ export function BoardGrid({
               across a board than any glyph. What still needs drawing is the square that TURNS the
               board, and only while it can still do it. */}
           {flippable && <FlipMark />}
+          {/* The caster's own pointer - see spotCells. Drawn after the ownership ring so it reads
+              as an overlay on top of whatever the square already says, not as part of it. */}
+          {spotted && (
+            <span
+              className="bg-spot-ring"
+              aria-hidden
+              style={spotColor ? { ["--bg-spot" as string]: spotColor } : undefined}
+            />
+          )}
           {mark === "guess" && <span className="bg-pencil-mark" aria-hidden />}
           {/* Dead water. Drawn across the whole square rather than in a corner like the guess pin,
               because it's a verdict on the square rather than a note about it - and because the

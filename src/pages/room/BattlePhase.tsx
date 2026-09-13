@@ -10,7 +10,7 @@ import { LeaveMatchButton } from "../../components/LeaveMatchButton";
 import { HostTakeover } from "../../components/HostTakeover";
 import { ClaimFeed } from "../../components/ClaimFeed";
 import { TeamBox } from "../../components/TeamBox";
-import { claimSquare, setTeamReady, unclaimSquare } from "../../lib/rooms";
+import { claimSquare, requestPause, setTeamReady, unclaimSquare } from "../../lib/rooms";
 import { facesForRoom } from "../../lib/challenges";
 import { cellVisuals, cellOwners } from "../../lib/cellVisuals";
 import { scoreFor, squareCounts } from "../../lib/flipLogic";
@@ -102,7 +102,7 @@ export function BattlePhase({
   // The NAME, not the clock: all this component wants is the boolean below, and taking the ticking
   // variant would re-render the board every second to re-derive a value that changes twice a match.
   const phase = useBattlePhaseName(claims, room);
-  const canClaim = phase === "match" && room.status === "battle";
+  const canClaim = phase === "match" && room.status === "battle" && !room.paused_at;
 
   /**
    * Turning the board over by hand, while nothing can be claimed.
@@ -328,7 +328,11 @@ export function BattlePhase({
       <HostTakeover players={players} onlinePlayerIds={onlinePlayerIds} myPlayerId={myPlayerId} />
 
       {/* The readiness gate. Only while the room is in `prep`, which is the one phase that does not
-          advance on a clock - it waits for every team to say it is here. */}
+          advance on a clock - it waits for every team to say it is here. The board itself is
+          deliberately not rendered anywhere below while this is up: reading it is what this screen
+          IS, and showing the live board underneath a "read the board" prompt let a team start
+          picking it apart - even previewing the far side - before every team had actually said it
+          was ready, which made the gate a formality rather than a beat. */}
       {room.status === "prep" && (
         <ReadyGate
           roomId={room.id}
@@ -339,137 +343,153 @@ export function BattlePhase({
         />
       )}
 
-
-      {/* What face is up and how many turns are left in the board. Both are public and both change
-          how you play the next thirty seconds, so they sit above the canvas rather than inside a
-          panel somebody may have dragged off-screen. */}
-      <div
-        className="row"
-        style={{ gap: "0.6rem", alignItems: "baseline", fontSize: "0.85rem" }}
-        data-face={shownFace}
-      >
-        <strong style={{ color: "var(--board-glow)", letterSpacing: "0.08em" }}>
-          {FACE_LABELS[shownFace]} side
-        </strong>
-
-        {/* Only while claiming is shut. Turning the board by hand mid-race would show a player
-            objectives that are not on the table, which is a way to misread the board rather than to
-            read it. */}
-        {!canClaim && (
-          <button
-            onClick={() => setPreview(previewing ? null : ((face === 0 ? 1 : 0) as BoardFace))}
-            aria-pressed={previewing}
-            style={{
-              fontSize: "0.72rem",
-              padding: "0.15rem 0.5rem",
-              borderColor: previewing ? "var(--accent)" : undefined,
-            }}
-            title="Read the objectives on the other side of the board before the race opens"
-          >
-            {previewing ? "Back to the live board" : `Look at the ${FACE_LABELS[face === 0 ? 1 : 0]} side`}
-          </button>
-        )}
-        {previewing && <span className="badge">preview - not the live board</span>}
-        <span className="muted">
-          {flipsLeft === 0
-            ? "no flip squares left - this board is settled"
-            : `${flipsLeft} flip square${flipsLeft === 1 ? "" : "s"} left`}
-        </span>
-        <span className="muted">
-          {lockout ? "lockout" : "non-lockout"} ·{" "}
-          {winCondition === "line"
-            ? "bingos win"
-            : bonusPerBingo === 0
-              ? `first to ${targetScore}`
-              : `first to ${targetScore}, bingo +${bonusPerBingo}`}
-          {" "}· {defaultTargetScore(boardSize)}+ squares wins outright either way
-          {room.practice ? " · practice, won't count" : ""}
-        </span>
-      </div>
-
-      <div className="row" style={{ gap: "0.4rem", alignSelf: "flex-end", marginBottom: "-0.4rem" }}>
-        <button
-          onClick={() => setCanvasOn(!canvasOn)}
-          style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem" }}
-          title="Drag panels by their title bar; resize from the bottom-right corner"
-        >
-          {canvasOn ? "Fixed layout" : "Move / resize panels"}
-        </button>
-        {canvasOn && (
-          <>
-            {/* The whole point of arranging panels is to stop having to arrange them. Locking is
-                what makes a layout something you set once rather than something you defend from
-                every stray drag for the rest of the match. */}
-            <button
-              onClick={() => setLocked(!locked)}
-              style={{
-                fontSize: "0.72rem",
-                padding: "0.15rem 0.5rem",
-                borderColor: locked ? "var(--accent)" : undefined,
-              }}
-              title={
-                locked
-                  ? "Panels are frozen. Unlock to move, resize or restack them."
-                  : "Freeze every panel where it is, so nothing moves by accident."
-              }
-              aria-pressed={locked}
-            >
-              {locked ? "Locked" : "Lock layout"}
-            </button>
-            <button onClick={resetLayout} style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem" }}>
-              Reset layout
-            </button>
-          </>
-        )}
-      </div>
-
-      {canvasOn ? (
-        <div className="match-canvas-wrap">
-          <div className="match-canvas" ref={canvasRef}>
-            <CanvasPanel {...panelProps("board")} flush>
-              {board(true)}
-            </CanvasPanel>
-            <CanvasPanel {...panelProps("clock")}>
-              <MatchClock claims={claims} room={room} maxVh={34} maxVw={26} />
-            </CanvasPanel>
-            <CanvasPanel {...panelProps("log")} flush>
-              <ClaimFeed
-                claims={claims}
-                players={players}
-                boardSize={boardSize}
-                faces={[faces.light, faces.dark]}
-                room={room}
-                maxHeight="100%"
-              />
-            </CanvasPanel>
-            <CanvasPanel {...panelProps("roster")}>
-              <div className="stack" style={{ gap: "0.6rem" }}>{teamBoxes}</div>
-            </CanvasPanel>
-          </div>
-
-          {/* Everything you refer to rather than watch, on one line across the bottom. */}
-          <MatchDock
-            challenges={challenges}
-            squareSet={room.square_set}
+      {/* Everything below is the live match - the board, the clock, the layout controls - and it
+          only exists once the room has actually left the readiness gate. `prep` has nothing here to
+          show: there is no clock running yet for STARTING/PREPARATION to be counting down, and the
+          board a team is meant to be reading is the one ReadyGate is asking about, not a live one
+          sitting behind it. */}
+      {room.status === "battle" && (
+        <>
+          <PauseControl
             roomId={room.id}
-            roomCode={room.code}
-            seed={room.seed}
-            rejoinCode={rejoinCode}
             myTeam={myTeam}
-            myPlayerId={myPlayerId}
-            activeTeamsList={activeTeamsList}
-            isHost={isHost}
-            markCount={marks.size}
-            onClearMarks={clearMarks}
+            teams={activeTeamsList}
+            pauseVotes={room.pause_votes ?? []}
+            paused={Boolean(room.paused_at)}
           />
-        </div>
-      ) : (
-        <div className="row" style={{ alignItems: "flex-start", gap: "1rem", width: "100%" }}>
-          <div style={{ flex: 1, minWidth: 0 }}>{board(false)}</div>
-          <div className="stack" style={{ width: "18rem", gap: "0.6rem" }}>
-            {sidebar}
+
+          {/* What face is up and how many turns are left in the board. Both are public and both
+              change how you play the next thirty seconds, so they sit above the canvas rather than
+              inside a panel somebody may have dragged off-screen. */}
+          <div
+            className="row"
+            style={{ gap: "0.6rem", alignItems: "baseline", fontSize: "0.85rem" }}
+            data-face={shownFace}
+          >
+            <strong style={{ color: "var(--board-glow)", letterSpacing: "0.08em" }}>
+              {FACE_LABELS[shownFace]} side
+            </strong>
+
+            {/* Only while claiming is shut. Turning the board by hand mid-race would show a player
+                objectives that are not on the table, which is a way to misread the board rather than
+                to read it. */}
+            {!canClaim && (
+              <button
+                onClick={() => setPreview(previewing ? null : ((face === 0 ? 1 : 0) as BoardFace))}
+                aria-pressed={previewing}
+                style={{
+                  fontSize: "0.72rem",
+                  padding: "0.15rem 0.5rem",
+                  borderColor: previewing ? "var(--accent)" : undefined,
+                }}
+                title="Read the objectives on the other side of the board before the race opens"
+              >
+                {previewing ? "Back to the live board" : `Look at the ${FACE_LABELS[face === 0 ? 1 : 0]} side`}
+              </button>
+            )}
+            {previewing && <span className="badge">preview - not the live board</span>}
+            <span className="muted">
+              {flipsLeft === 0
+                ? "no flip squares left - this board is settled"
+                : `${flipsLeft} flip square${flipsLeft === 1 ? "" : "s"} left`}
+            </span>
+            <span className="muted">
+              {lockout ? "lockout" : "non-lockout"} ·{" "}
+              {winCondition === "line"
+                ? "bingos win"
+                : bonusPerBingo === 0
+                  ? `first to ${targetScore}`
+                  : `first to ${targetScore}, bingo +${bonusPerBingo}`}
+              {" "}· {defaultTargetScore(boardSize)}+ squares wins outright either way
+              {room.practice ? " · practice, won't count" : ""}
+            </span>
           </div>
-        </div>
+
+          <div className="row" style={{ gap: "0.4rem", alignSelf: "flex-end", marginBottom: "-0.4rem" }}>
+            <button
+              onClick={() => setCanvasOn(!canvasOn)}
+              style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem" }}
+              title="Drag panels by their title bar; resize from the bottom-right corner"
+            >
+              {canvasOn ? "Fixed layout" : "Move / resize panels"}
+            </button>
+            {canvasOn && (
+              <>
+                {/* The whole point of arranging panels is to stop having to arrange them. Locking is
+                    what makes a layout something you set once rather than something you defend from
+                    every stray drag for the rest of the match. */}
+                <button
+                  onClick={() => setLocked(!locked)}
+                  style={{
+                    fontSize: "0.72rem",
+                    padding: "0.15rem 0.5rem",
+                    borderColor: locked ? "var(--accent)" : undefined,
+                  }}
+                  title={
+                    locked
+                      ? "Panels are frozen. Unlock to move, resize or restack them."
+                      : "Freeze every panel where it is, so nothing moves by accident."
+                  }
+                  aria-pressed={locked}
+                >
+                  {locked ? "Locked" : "Lock layout"}
+                </button>
+                <button onClick={resetLayout} style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem" }}>
+                  Reset layout
+                </button>
+              </>
+            )}
+          </div>
+
+          {canvasOn ? (
+            <div className="match-canvas-wrap">
+              <div className="match-canvas" ref={canvasRef}>
+                <CanvasPanel {...panelProps("board")} flush>
+                  {board(true)}
+                </CanvasPanel>
+                <CanvasPanel {...panelProps("clock")}>
+                  <MatchClock claims={claims} room={room} maxVh={34} maxVw={26} />
+                </CanvasPanel>
+                <CanvasPanel {...panelProps("log")} flush>
+                  <ClaimFeed
+                    claims={claims}
+                    players={players}
+                    boardSize={boardSize}
+                    faces={[faces.light, faces.dark]}
+                    room={room}
+                    maxHeight="100%"
+                  />
+                </CanvasPanel>
+                <CanvasPanel {...panelProps("roster")}>
+                  <div className="stack" style={{ gap: "0.6rem" }}>{teamBoxes}</div>
+                </CanvasPanel>
+              </div>
+
+              {/* Everything you refer to rather than watch, on one line across the bottom. */}
+              <MatchDock
+                challenges={challenges}
+                squareSet={room.square_set}
+                roomId={room.id}
+                roomCode={room.code}
+                seed={room.seed}
+                rejoinCode={rejoinCode}
+                myTeam={myTeam}
+                myPlayerId={myPlayerId}
+                activeTeamsList={activeTeamsList}
+                isHost={isHost}
+                markCount={marks.size}
+                onClearMarks={clearMarks}
+              />
+            </div>
+          ) : (
+            <div className="row" style={{ alignItems: "flex-start", gap: "1rem", width: "100%" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>{board(false)}</div>
+              <div className="stack" style={{ width: "18rem", gap: "0.6rem" }}>
+                {sidebar}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -568,6 +588,119 @@ function ReadyGate({
       )}
 
       {error && <div className="error-text">{error}</div>}
+    </div>
+  );
+}
+
+/**
+ * Ask-to-pause, for the same reason Elden Battleship's version exists: a twenty-minute match needs a
+ * way for a crew to step away that doesn't mean quitting the room.
+ *
+ * Deliberately not a unilateral button. One team pausing on its own could stall a match it's about
+ * to lose, so both pausing and resuming ask the same question the readiness gate does - every active
+ * team has to agree - and `pause_votes` is the vote, not the pause itself. Room.tsx watches it
+ * alongside the room and has the host flip `paused_at` once the votes line up either way; this
+ * component only ever asks.
+ *
+ * Shown any time the match is live - not gated to a phase the way ReadyGate is to `prep` - because a
+ * team can need a break during the countdown just as easily as mid-race.
+ */
+function PauseControl({
+  roomId,
+  myTeam,
+  teams,
+  pauseVotes,
+  paused,
+}: {
+  roomId: string;
+  myTeam: number;
+  teams: number[];
+  pauseVotes: number[];
+  /** Whether the match is actually paused right now, as opposed to merely being asked to be. */
+  paused: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const voted = new Set(pauseVotes);
+  // Same flag, both directions: before a pause it means "asked to pause"; once paused it means
+  // "still wants to stay paused", so withdrawing it is how a team says it's ready to continue.
+  const mine = voted.has(myTeam);
+  const waitingOn = teams.filter((t) => !voted.has(t));
+
+  async function toggle() {
+    setBusy(true);
+    setError(null);
+    try {
+      await requestPause(roomId, myTeam, !mine);
+    } catch (e) {
+      // Supabase/PostgREST errors are plain objects with a `message`, not an Error, so the usual
+      // `instanceof Error` check misses them and prints "[object Object]" - most visible here since
+      // this is the one control whose database support (the pause_match migration) a room might not
+      // have applied yet, where every other write in this file is already against a settled schema.
+      const message =
+        e instanceof Error
+          ? e.message
+          : e && typeof e === "object" && "message" in e && typeof e.message === "string"
+            ? e.message
+            : String(e);
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (paused) {
+    return (
+      <div className="panel stack" style={{ width: "min(560px, 100%)", gap: "0.5rem", borderColor: "var(--accent)" }}>
+        <strong>Match paused</strong>
+        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+          {teams.map((t) => (
+            <span key={t} className="row" style={{ gap: "0.3rem", alignItems: "center" }}>
+              <span aria-hidden style={{ color: voted.has(t) ? "var(--text-dim)" : "var(--accent)" }}>
+                {voted.has(t) ? "⏸" : "▶"}
+              </span>
+              <span style={{ color: teamHex(t), fontSize: "0.85rem" }}>{teamName(t)}</span>
+            </span>
+          ))}
+        </div>
+        <button className={mine ? "primary" : undefined} disabled={busy} onClick={() => void toggle()}>
+          {mine ? `${teamName(myTeam)} is ready to continue` : `Keep ${teamName(myTeam)} paused`}
+        </button>
+        <span className="muted" style={{ fontSize: "0.8rem" }}>
+          {waitingOn.length === 0
+            ? "Every team has asked to stay paused."
+            : `Resumes once every team is ready - still waiting on ${waitingOn
+                .map((t) => teamName(t))
+                .join(", ")}.`}
+        </span>
+        {error && <div className="error-text">{error}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="row" style={{ gap: "0.5rem", alignItems: "center", alignSelf: "flex-start" }}>
+      <button
+        onClick={() => void toggle()}
+        disabled={busy}
+        aria-pressed={mine}
+        style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", borderColor: mine ? "var(--accent)" : undefined }}
+        title={mine ? "Withdraw your request - the match stays live" : "Ask every team to pause the match"}
+      >
+        {mine ? "Cancel pause request" : "⏸ Request pause"}
+      </button>
+      {voted.size > 0 && (
+        <span className="muted" style={{ fontSize: "0.72rem" }}>
+          {[...voted].map((t) => teamName(t)).join(", ")} asked to pause
+          {waitingOn.length > 0 ? ` - waiting on ${waitingOn.map((t) => teamName(t)).join(", ")}` : ""}
+        </span>
+      )}
+      {error && (
+        <span className="error-text" style={{ fontSize: "0.72rem" }}>
+          {error}
+        </span>
+      )}
     </div>
   );
 }

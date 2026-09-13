@@ -1,0 +1,37 @@
+warning: in the working copy of 'src/App.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/BoardGrid.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/hooks/useBattlePhase.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/matchTime.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/overlayCast.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/profiles.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/rooms.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/CasterControl.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/CasterControl.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/OverlayBoard.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/OverlayBoard.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/OverlayTimer.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/OverlayTimer.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/Room.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/room/BattlePhase.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/types/bingoFlip.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'supabase/functions/twitch-login/index.ts', LF will be replaced by CRLF the next time Git touches it
+ src/App.tsx                              |  52 [32m++++[m[31m-[m
+ src/components/BoardGrid.css             |  39 [32m++++[m
+ src/components/BoardGrid.tsx             |  27 [32m++[m[31m-[m
+ src/hooks/useBattlePhase.ts              |  17 [32m+[m[31m-[m
+ src/lib/matchTime.ts                     |  13 [32m++[m
+ src/lib/overlayCast.ts                   |  21 [32m++[m
+ src/lib/profiles.ts                      |   3 [32m+[m
+ src/lib/rooms.ts                         | 105 [32m+++++++[m[31m--[m
+ src/lib/sfx.ts                           |  66 [32m+++++[m[31m-[m
+ src/pages/CasterControl.css              |  49 [32m++++[m
+ src/pages/CasterControl.tsx              | 241 [32m++++++++++++++++++[m[31m-[m
+ src/pages/OverlayBoard.css               |  15 [32m++[m
+ src/pages/OverlayBoard.tsx               |  17 [32m+[m[31m-[m
+ src/pages/OverlayTimer.css               |  23 [32m+[m[31m-[m
+ src/pages/OverlayTimer.tsx               |  46 [32m+++[m[31m-[m
+ src/pages/Room.tsx                       | 142 [32m++++[m[31m--------[m
+ src/pages/room/BattlePhase.tsx           | 385 [32m+++++++++++++++++++++[m[31m----------[m
+ src/types/bingoFlip.ts                   |  10 [32m+[m
+ supabase/functions/twitch-login/index.ts |   1 [32m+[m
+ 19 files changed, 1009 insertions(+), 263 deletions(-)

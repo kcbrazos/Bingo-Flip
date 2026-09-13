@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { useRoom } from "../hooks/useRoom";
 import { LobbyPhase } from "./room/LobbyPhase";
 import { BattlePhase } from "./room/BattlePhase";
-import { joinRoom, resetRoomToLobby, redeemRejoinCode, startBattle } from "../lib/rooms";
+import { joinRoom, resetRoomToLobby, redeemRejoinCode, startBattle, pauseMatch, resumeMatch } from "../lib/rooms";
 import { activeTeams } from "../lib/teams";
 import { teamName, teamHex } from "../lib/teamColors";
 import {
@@ -21,19 +21,17 @@ import { ClaimFeed } from "../components/ClaimFeed";
 import { TeamBox } from "../components/TeamBox";
 import { HostTakeover } from "../components/HostTakeover";
 import { formatRoomCode } from "../lib/roomCode";
-import { useBattlePhaseName } from "../hooks/useBattlePhase";
+import { useMatchSfx } from "../hooks/useMatchSfx";
 import { ConnectionBanner } from "../components/ConnectionBanner";
 import { TeamPicker } from "../components/TeamPicker";
 import { LoadingScreen } from "../components/BrandMark";
 import { BoardLegend } from "../components/BoardLegend";
 import { facesForRoom } from "../lib/challenges";
-import { playSfx } from "../lib/sfx";
 import { archiveMatch } from "../lib/stats";
 import { MatchClock } from "../components/MatchClock";
 import { LeaveMatchButton } from "../components/LeaveMatchButton";
 import { cellVisuals, cellOwners } from "../lib/cellVisuals";
 import {
-  cellsByTeam,
   completedLines,
   exhaustion,
   scoreFor,
@@ -55,95 +53,9 @@ import "./Spectator.css";
 export function Room() {
   const { code } = useParams<{ code: string }>();
   const state = useRoom(code);
-  // The NAME only. This hook sits at the top of the match screen, so anything that changes here
-  // re-renders the board, the log and every roster below it - and the one thing this page wants out
-  // of the clock is the opening cue below, which fires on a phase change. Taking the ticking variant
-  // here was re-rendering the entire match screen once a second for a number nothing on this page
-  // draws. See useBattlePhase.
-  const battlePhase = useBattlePhaseName(state.claims, state.room);
-  const prevPhase = useRef<string | null>(null);
-
-  // Fanfare or fail sting, once, on the moment somebody takes it.
-  //
-  // Gated on having seen a previous status, so opening a link to a match that finished an hour ago
-  // is a silent recap.
-  const prevStatusForResult = useRef<string | null>(null);
-  useEffect(() => {
-    const status = state.room?.status ?? null;
-    if (status === "finished" && prevStatusForResult.current !== null && prevStatusForResult.current !== "finished") {
-      const myTeam = state.myPlayer?.team ?? null;
-      const winner = state.room?.winner_team ?? null;
-      const lost = winner === null || (myTeam !== null && winner !== myTeam);
-      playSfx(lost ? "defeat" : "victory");
-    }
-    prevStatusForResult.current = status;
-  }, [state.room?.status, state.room?.winner_team, state.myPlayer?.team]);
-
-  // Claiming is open. Gated on having seen a previous phase, so loading the page into a match that
-  // is already running doesn't sound the opening at somebody who just arrived twenty minutes late.
-  //
-  // Only here, and not also when the room turns to `battle`: that is the START of the countdown,
-  // and there is nothing to do for the next few minutes but read. One match, one opening.
-  useEffect(() => {
-    if (battlePhase === "match" && prevPhase.current !== null && prevPhase.current !== "match") {
-      playSfx("start");
-    }
-    prevPhase.current = battlePhase;
-  }, [battlePhase]);
-
-  /**
-   * A square changed hands, or a line closed.
-   *
-   * Driven off claim IDS rather than off the array's length, because the log both grows and shrinks -
-   * releasing a square deletes a row - and a length that went 8, 7, 8 would otherwise sound the
-   * re-claim as nothing at all while sounding the release as a claim.
-   *
-   * The first pass only RECORDS what is already there. Opening a room mid-match reads a board with
-   * twenty claims on it, and every one of them is news to this browser and history to everybody
-   * else; playing them would be a burst of twenty chimes for events that happened before you
-   * arrived. `seeded` is what tells the two apart.
-   */
-  const heard = useRef<Set<string>>(new Set());
-  const seeded = useRef(false);
-  const lineCounts = useRef<Map<number, number>>(new Map());
-  useEffect(() => {
-    const room = state.room;
-    if (!room) return;
-
-    // Re-arm on the way out of a match, so the next one in this room starts from silence rather
-    // than from the last match's log - which "Play again" has already deleted underneath us.
-    if (room.status === "lobby" || room.status === "prep") {
-      heard.current = new Set();
-      lineCounts.current = new Map();
-      seeded.current = false;
-      return;
-    }
-
-    const fresh = state.claims.filter((c) => !heard.current.has(c.id));
-    const wasSeeded = seeded.current;
-    heard.current = new Set(state.claims.map((c) => c.id));
-
-    // Lines are counted per team every pass rather than derived from the new claims, because a
-    // RELEASED square can take a line back down - and a count that only ever went up would sound
-    // the same line twice when it was rebuilt.
-    const lines = new Map<number, number>();
-    for (const team of cellsByTeam(state.claims).keys()) {
-      lines.set(team, completedLines(state.claims, room.board_size, team).length);
-    }
-    const closed = [...lines].some(([team, n]) => n > (lineCounts.current.get(team) ?? 0));
-    lineCounts.current = lines;
-
-    if (!wasSeeded) {
-      seeded.current = true;
-      return;
-    }
-    if (fresh.length === 0) return;
-
-    // A bingo replaces the mark rather than stacking on it, and the end of the match replaces both:
-    // victory and defeat are already sounding, and a chime under a fanfare is just mud.
-    if (room.status === "finished") return;
-    playSfx(closed ? "bingo" : "mark");
-  }, [state.claims, state.room]);
+  // Every sound the match makes - see hooks/useMatchSfx, which pages/OverlayAudio shares so a
+  // caster's stream carries the identical cues on the identical triggers.
+  useMatchSfx(state.room, state.claims, state.myPlayer?.team ?? null);
 
   // The match opens the instant every team has said it has read the board.
   //
@@ -176,6 +88,50 @@ export function Room() {
       setHostError(e instanceof Error ? e.message : String(e));
     });
   }, [state.room, state.myPlayer, state.players, state.teamReady]);
+
+  // Pausing and resuming both need every active team's agreement (see BattlePhase's PauseControl,
+  // which is the only thing that ever writes `pause_votes`), and flipping `paused_at` itself is the
+  // host's job alone - same division of labour as opening the match above, and for the same reason:
+  // `paused_at` and, on resume, `started_at` are what every client's clock is anchored to, and
+  // guard_match_open refuses that write from anyone but the host.
+  const pausingRef = useRef(false);
+  const resumingRef = useRef(false);
+  useEffect(() => {
+    const room = state.room;
+    if (!room || room.status !== "battle" || !state.myPlayer?.is_host) {
+      pausingRef.current = false;
+      resumingRef.current = false;
+      return;
+    }
+
+    const teams = activeTeams(state.players);
+    const votes = new Set(room.pause_votes ?? []);
+    const allWantPaused = teams.length > 0 && teams.every((t) => votes.has(t));
+
+    if (!room.paused_at && allWantPaused) {
+      if (!pausingRef.current) {
+        pausingRef.current = true;
+        pauseMatch(room.id).catch((e) => {
+          pausingRef.current = false;
+          setHostError(e instanceof Error ? e.message : String(e));
+        });
+      }
+    } else {
+      pausingRef.current = false;
+    }
+
+    if (room.paused_at && !allWantPaused) {
+      if (!resumingRef.current) {
+        resumingRef.current = true;
+        resumeMatch(room).catch((e) => {
+          resumingRef.current = false;
+          setHostError(e instanceof Error ? e.message : String(e));
+        });
+      }
+    } else {
+      resumingRef.current = false;
+    }
+  }, [state.room, state.myPlayer, state.players]);
 
   // Remembers where you are so the top bar can offer a way back - and forgets it the moment the room
   // stops being somewhere you can return to, so the link never points at a room that's gone.

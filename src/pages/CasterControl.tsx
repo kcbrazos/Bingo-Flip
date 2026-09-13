@@ -20,7 +20,12 @@ import { useBoxSize } from "../hooks/useBoxSize";
 import { SourceRow } from "../components/SourceRow";
 import { SOURCE_SIZE, placeBoard } from "../lib/overlayBoardLayout";
 import { squaresRevealed } from "../lib/overlayReveal";
-import { useBattlePhaseName } from "../hooks/useBattlePhase";
+import { useBattlePhaseName, useBattleClock } from "../hooks/useBattlePhase";
+import { useFlipOdds } from "../hooks/useFlipOdds";
+import { OddsPanel } from "../components/OddsPanel";
+import { formatDuration } from "../lib/matchTime";
+import { useCastScreens } from "../hooks/useCastScreens";
+import { useCasterAux } from "../lib/castAux";
 import {
   useCastPublisher,
   DEFAULT_VIEW,
@@ -29,12 +34,45 @@ import {
   MIN_OPACITY,
   type CastView,
 } from "../lib/overlayCast";
+import type { BoardFace } from "../types/bingoFlip";
 import "./CasterControl.css";
 import "./OverlayBoard.css";
 import "../components/BoardGrid.css";
 
 /** On-screen size of the 1:1 monitor. The viewport inside it is always SOURCE_SIZE. */
 const PREVIEW_PX = 420;
+
+/**
+ * How far the pointer may travel and still count as a click rather than a drag.
+ *
+ * The monitor is both a thing you drag and (while spotting) a thing you click, and a mouse never
+ * stays perfectly still between press and release. Generous enough to absorb a hand on a trackpad,
+ * small enough that a deliberate pan is never mistaken for a point.
+ */
+const CLICK_SLOP = 4;
+
+/**
+ * Which square is under a point on screen, asked of the DOM rather than computed.
+ *
+ * The arithmetic version of this is available and wrong: the rendered board is never exactly
+ * `cells x cellSize` once the coordinate gutters, the grid gaps and the borders are counted, and
+ * the monitor is additionally inside a `scale()` transform. `getBoundingClientRect` reports the
+ * post-transform box the caster is actually looking at, so walking the cells and asking which one
+ * contains the point is exact by construction.
+ *
+ * Deliberately not `elementFromPoint`: the cells sit under BoardGrid's own marker layer, and
+ * hit-testing would make this depend on that layer's `pointer-events` staying `none`.
+ */
+function cellAtPoint(root: HTMLElement, x: number, y: number): number | null {
+  for (const el of root.querySelectorAll<HTMLElement>("[data-cell]")) {
+    const r = el.getBoundingClientRect();
+    if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) {
+      const n = Number(el.dataset.cell);
+      return Number.isInteger(n) ? n : null;
+    }
+  }
+  return null;
+}
 
 /**
  * The aim pad, in reading order: glyph, x, y, and the key that does the same thing.
@@ -78,11 +116,29 @@ export function CasterControl() {
   const drag = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null);
   // Only to suppress the board's own glide while a drag is live - see .cast-dragging.
   const [dragging, setDragging] = useState(false);
+  /**
+   * Point-at-a-square mode: the monitor stops being only a thing you drag and starts being a thing
+   * you click. A mode rather than a modifier because a caster is doing this one-handed while
+   * talking - "hold this key and click" is two things to remember under load. Armed, a CLICK
+   * spotlights and a DRAG still pans - see the pointer handlers, which tell them apart by distance
+   * travelled.
+   */
+  const [spotting, setSpotting] = useState(false);
+  /** Where the pointer went down, so a click can be told from a drag. Null between gestures. */
+  const downAt = useRef<{ x: number; y: number } | null>(null);
 
   const room = state.room;
   // Drives the reveal gate below: names hold until the board has finished being dealt.
   const battlePhase = useBattlePhaseName(state.claims, room);
+  const matchClock = useBattleClock(state.claims, room);
   const teams = useMemo(() => activeTeams(state.players), [state.players]);
+  // The desk's own read of lib/flipOdds - with the history line, since this is the one screen with
+  // room to show it and a reason to want it. See components/OddsPanel and pages/OverlayOdds for the
+  // standalone source this shares its model with.
+  const { snapshot: odds, timeline: oddsTimeline } = useFlipOdds(state.claims, room, state.players, true);
+  /** The player-stream boxes and how far behind each is running - see lib/castAux. */
+  const aux = useCasterAux(code);
+  const screens = useCastScreens(state.players);
 
   /**
    * Nothing goes down the wire but framing.
@@ -227,7 +283,12 @@ export function CasterControl() {
 
   const boardSize = room.board_size;
   const faces = facesForRoom(room.id, boardSize * boardSize, room.square_set, room.seed, room.custom_square_set);
-  const challenges = state.face === 0 ? faces.light : faces.dark;
+  // A peek outranks the match's real face for which NAMES the monitor (and the driven source) show -
+  // see `previewFace` on CastView. Ownership is untouched: a peek changes what an unclaimed square is
+  // called, never who holds it.
+  const shownFace = view.previewFace ?? state.face;
+  const challenges = shownFace === 0 ? faces.light : faces.dark;
+  const peeking = view.previewFace !== null && view.previewFace !== state.face;
   /** Whether the squares may be named yet - see lib/overlayReveal.ts. */
   const revealed = squaresRevealed(room.status, battlePhase);
 
@@ -295,6 +356,10 @@ export function CasterControl() {
   const boardUrl = `${origin}#/overlay-board/${room.code}`;
   const timerUrl = `${origin}#/overlay-timer/${room.code}`;
   const keyUrl = `${origin}#/overlay-key/${room.code}`;
+  // No team on the caster's copy: with none, the closing sting is the spectator's - somebody was
+  // left standing, which is the interesting fact from the desk. See pages/OverlayAudio.
+  const audioUrl = `${origin}#/overlay-audio/${room.code}`;
+  const oddsUrl = `${origin}#/overlay-odds/${room.code}`;
 
   // The square under the crosshair, for the readout. Clamped the same way the pan is.
   const framed = (c: number) => Math.min(boardSize - 1, Math.max(0, Math.floor(c * boardSize)));
@@ -321,13 +386,36 @@ export function CasterControl() {
       {/* The face, and how many turns the board has left in it. The one piece of match state a
           caster genuinely cannot read off the board in front of them at a glance, and the one most
           likely to be the next thing they have to say out loud. */}
-      <div className="panel row" style={{ gap: "0.9rem", alignItems: "baseline", fontSize: "0.9rem" }} data-face={state.face}>
+      <div className="panel row" style={{ gap: "0.9rem", alignItems: "baseline", fontSize: "0.9rem" }} data-face={shownFace}>
         <strong style={{ color: "var(--board-glow)", letterSpacing: "0.1em" }}>
-          {FACE_LABELS[state.face]} side
+          {FACE_LABELS[shownFace]} side
         </strong>
         <span className="muted">
           {flipsLeft === 0 ? "board is settled" : `${flipsLeft} flip square${flipsLeft === 1 ? "" : "s"} left`}
         </span>
+        {/* Peek: look at the other face's objectives without touching the match. Nothing on a
+            bingo board is hidden, so this is safe to leave on stream - see `previewFace`. It only
+            ever changes which NAMES the unclaimed squares show; ownership never moves. */}
+        <div className="row" style={{ gap: "0.25rem" }} title="Look at a face's objectives without changing the match">
+          {(["live", 0, 1] as const).map((f) => {
+            const active = f === "live" ? view.previewFace === null : view.previewFace === f;
+            return (
+              <button
+                key={String(f)}
+                className={active ? "primary" : ""}
+                style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem" }}
+                onClick={() => set({ previewFace: f === "live" ? null : (f as BoardFace) })}
+              >
+                {f === "live" ? "Live" : FACE_LABELS[f]}
+              </button>
+            );
+          })}
+        </div>
+        {peeking && (
+          <span className="muted" style={{ fontSize: "0.78rem" }}>
+            peeking - the match is still on {FACE_LABELS[state.face]}
+          </span>
+        )}
         {/* The number a caster calls out. Under points that is the score against the target, not
             the square count - a team can be behind on squares and ahead on the board, and the desk
             saying the wrong one is how a cast ends up narrating the wrong race. */}
@@ -351,21 +439,46 @@ export function CasterControl() {
           {/* Drag to slide the stream view around; the wheel zooms. Both act on the same point
               under the cursor, so following the action is one gesture rather than a set of decisions. */}
           <div
-            className={`cast-preview${dragging ? " cast-dragging" : ""}`}
+            className={`cast-preview${dragging ? " cast-dragging" : ""}${spotting ? " cast-spotting" : ""}`}
             style={{ width: PREVIEW_PX, height: PREVIEW_PX }}
             onPointerDown={(e) => {
+              downAt.current = { x: e.clientX, y: e.clientY };
               drag.current = { x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy };
               setDragging(true);
               e.currentTarget.setPointerCapture(e.pointerId);
             }}
-            onPointerMove={(e) => drag.current && panTo(e)}
+            onPointerMove={(e) => {
+              if (!drag.current) return;
+              // While spotting, hold the view still until the gesture has committed to being a
+              // drag - otherwise the jitter between press and release on a click pans the board a
+              // pixel or two, and "point at D3" also nudges the stream.
+              if (spotting && downAt.current) {
+                const dx = Math.abs(e.clientX - downAt.current.x);
+                const dy = Math.abs(e.clientY - downAt.current.y);
+                if (dx <= CLICK_SLOP && dy <= CLICK_SLOP) return;
+              }
+              panTo(e);
+            }}
             onPointerUp={(e) => {
+              const from = downAt.current;
+              const root = e.currentTarget;
               drag.current = null;
+              downAt.current = null;
               setDragging(false);
-              e.currentTarget.releasePointerCapture(e.pointerId);
+              root.releasePointerCapture(e.pointerId);
+              if (!spotting || !from) return;
+              if (Math.abs(e.clientX - from.x) > CLICK_SLOP || Math.abs(e.clientY - from.y) > CLICK_SLOP) return;
+              const cell = cellAtPoint(root, e.clientX, e.clientY);
+              setView((v) => {
+                // Clicking the lit square again puts the light out - the gesture everyone tries
+                // first, and the only way to clear it without reaching for another control.
+                const lit = v.spot?.length === 1 && v.spot[0] === cell;
+                return { ...v, spot: cell === null || lit ? null : [cell], spotColor: null };
+              });
             }}
             onPointerCancel={() => {
               drag.current = null;
+              downAt.current = null;
               setDragging(false);
             }}
             onWheel={(e) => {
@@ -411,6 +524,8 @@ export function CasterControl() {
                   cellOwners={owners}
                   flipCells={flipCells}
                   ringedBy={ringedBy}
+                  spotCells={view.spot ? new Set(view.spot) : undefined}
+                  spotColor={view.spotColor ?? undefined}
                   // Matches the source exactly - the monitor has to BE the frame, not resemble it.
                   coordEdges="all"
                   maxVh={`${boardPx}px`}
@@ -483,6 +598,36 @@ export function CasterControl() {
             {/* The warning that lived here said "ships are on stream during a live match - your
                 call, just don't leave it up over a break". There are no ships and nothing on this
                 board is a spoiler, so there is nothing left to caution anybody about. */}
+          </section>
+
+          {/*
+            The spotlight: what the caster is pointing at. A stream viewer cannot follow a finger
+            on a monitor, so "the one at D4" otherwise has no picture attached to it.
+          */}
+          <section>
+            <h3>Spotlight</h3>
+            <label className="cast-check">
+              <input type="checkbox" checked={spotting} onChange={(e) => setSpotting(e.target.checked)} />
+              <span>Click the board to point at a square</span>
+            </label>
+            <div className="cast-buttons">
+              <button
+                disabled={!view.spot?.length}
+                onClick={() => set({ spot: null, spotColor: null })}
+                title="Put the light out"
+              >
+                Clear spotlight
+              </button>
+              {view.spot?.length === 1 && challenges[view.spot[0]] && (
+                <span className="muted" style={{ fontSize: "0.82rem", alignSelf: "center" }}>
+                  {cellLabel(view.spot[0], boardSize)} - {challenges[view.spot[0]].name}
+                </span>
+              )}
+            </div>
+            <p className="cast-note muted">
+              With this on, a click points and a drag still pans. Click the lit square again to
+              clear it.
+            </p>
           </section>
 
           <section>
@@ -608,6 +753,65 @@ export function CasterControl() {
             </p>
           </section>
 
+          {/*
+            The evaluation bar, live on the desk - see lib/flipOdds. A caster reads this to decide
+            whether a swing is worth calling out loud, without having to bring the standalone
+            source up on a monitor of their own to check.
+          */}
+          <section>
+            <h3>Odds</h3>
+            <div style={{ width: "100%", height: "220px", position: "relative" }}>
+              <OddsPanel
+                snapshot={odds}
+                points={oddsTimeline}
+                elapsed={matchClock?.phase === "match" ? formatDuration(matchClock.matchElapsed) : "--:--"}
+                showGraph
+              />
+            </div>
+            <p className="cast-note muted">
+              Each team's chance of winning from here, replayed the same way for everyone watching -
+              see the standalone Odds source below to bring it up on stream.
+            </p>
+          </section>
+
+          {/*
+            The player streams: a box per seat, and a way to kick one that's drifted. See
+            lib/castAux for the resync/latency channel and pages/OverlayScreen for the box itself.
+          */}
+          {screens.length > 0 && (
+            <section>
+              <h3>Player streams</h3>
+              <div className="cast-buttons">
+                <button onClick={() => aux.resync()} title="Reload every player stream at once">
+                  Resync all
+                </button>
+              </div>
+              <div className="cast-screens">
+                {screens.map((s) => {
+                  const ms = aux.latencies.get(s.slot);
+                  return (
+                    <div className="cast-screen-row" key={s.slot}>
+                      <span className="cast-screen-name" style={{ color: teamHex(s.team) }}>
+                        {s.name ?? teamName(s.team)}
+                      </span>
+                      <span className="cast-screen-lat">
+                        {ms === undefined ? "-" : `${(ms / 1000).toFixed(1)}s behind`}
+                      </span>
+                      <button className="cast-screen-resync" onClick={() => aux.resync(s.slot)} title="Reload just this stream">
+                        resync
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="cast-note muted">
+                Latency is read from each box every few seconds - a seat with no linked Twitch shows
+                a name plate and no reading. If one stream drifts on its own, add a{" "}
+                <strong>Render Delay</strong> filter to that Screen source in OBS to nudge it back.
+              </p>
+            </section>
+          )}
+
           <section>
             <h3>Browser sources</h3>
             <p className="muted cast-note">
@@ -630,6 +834,29 @@ export function CasterControl() {
               size="1920 x 90"
               note="a thin strip for the bottom edge - add ?plate=0 for no backing"
             />
+            {/* Nothing to look at and nothing to aim, so it takes no frame from this page at all -
+                it reads the room directly, exactly as the clock and the key do. */}
+            <SourceRow
+              label="Audio"
+              url={audioUrl}
+              size="100 x 100"
+              note="the match's sound - no picture. Tick 'Control audio via OBS' for its own fader"
+            />
+            <SourceRow
+              label="Odds"
+              url={oddsUrl}
+              size="960 x 320"
+              note="each team's chance of winning and the line that got them there - bring it up on a swing"
+            />
+            {screens.map((s) => (
+              <SourceRow
+                key={s.slot}
+                label={`Stream - ${s.name ?? teamName(s.team)}`}
+                url={`${origin}#/overlay-screen/${room.code}?slot=${s.slot}`}
+                size="640 x 360"
+                note="that player's muted Twitch stream, capped at 480p - size and place per seat"
+              />
+            ))}
           </section>
         </div>
       </div>
