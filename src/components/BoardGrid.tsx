@@ -602,8 +602,15 @@ export function BoardGrid({
     // Counts are appended rather than replacing the square's description: the chips along the
     // bottom are abbreviated to initials and capped at three, so the tooltip is where a full
     // "Marchbanks 4, KC 2" can actually be read.
+    //
+    // The title is dropped when it just repeats the label already printed on the square - which
+    // happens whenever a set has no separate tooltip and the caller falls back to the same name for
+    // both. Repeating text a player is already looking at is not "extra info", and this is the one
+    // thing the tooltip exists to add.
+    const text = cellText?.(i);
+    const title = text && text.title && text.title !== text.label ? text.title : null;
     const tallies = counts?.get(i) ?? [];
-    const parts = [cellText?.(i)?.title, tallies.map((c) => `${c.fullName} ${c.tally}`).join(", ")].filter(Boolean);
+    const parts = [title, tallies.map((c) => `${c.fullName} ${c.tally}`).join(", ")].filter(Boolean);
 
     if (parts.length > 0) {
       const rect = e.currentTarget.getBoundingClientRect();

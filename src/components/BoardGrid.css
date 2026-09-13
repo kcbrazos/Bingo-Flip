@@ -361,12 +361,14 @@
  * and a colour can be matched against the key, not enough to make the board read as a bag of sweets
  * or to cost the names their contrast. Raise it and the text starts to lose.
  *
- * Named rather than written into the mix, because it is the one number here that can only really be
- * judged on a live board: set --bg-tint on .bg-grid (or on one board's wrapper) to move every
- * square at once without touching the rule.
+ * Flat, not washed: the fill used to be a color-mix of the region hue into --cell, but at the
+ * strength needed to separate visibly it also flattened the contrast a pencil mark or a ruled-out
+ * cross needs to read against the cell. The region is still told - the square's NAME carries it,
+ * inheriting the same --bg-region variable this class sets - so nothing is lost, and an unmarked
+ * square now looks unmistakably different from a marked one.
  */
 .bg-cell-tinted.bg-empty {
-  background: color-mix(in srgb, var(--bg-region, transparent) var(--bg-tint, 20%), var(--cell));
+  background: var(--cell);
 }
 
 /**

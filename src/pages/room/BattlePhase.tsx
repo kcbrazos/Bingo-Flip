@@ -105,22 +105,32 @@ export function BattlePhase({
   const canClaim = phase === "match" && room.status === "battle" && !room.paused_at;
 
   /**
-   * Turning the board over by hand, while nothing can be claimed.
+   * Turning the board over by hand, before the race itself has started.
    *
    * The whole point of the buffer before a match is to read BOTH faces and decide which one you
    * would rather be racing on - and until this existed there was no way to see the other one. A
    * player could be told the board flips and never look at what it flips to.
    *
-   * Null means "whatever the match says", so the preview cannot get stuck: the moment claiming opens
-   * the board snaps back to the real face, and it cannot be raised again.
+   * Gated on the PHASE, not on `canClaim`: a pause also makes canClaim false, and a team mid-race
+   * asking every other team to pause is not asking for a second look at the board it already
+   * committed to - once MATCH has begun, hand-turning it back would be reading objectives that
+   * aren't live for a race that already is. Null means "whatever the match says", so the preview
+   * cannot get stuck: the moment the phase reaches match the board snaps back to the real face and
+   * cannot be raised again for the rest of it.
    */
   const [preview, setPreview] = useState<BoardFace | null>(null);
+  const previewable = phase === "starting" || phase === "preparation";
   useEffect(() => {
-    if (canClaim) setPreview(null);
-  }, [canClaim]);
-  const shownFace: BoardFace = !canClaim && preview !== null ? preview : face;
+    if (!previewable) setPreview(null);
+  }, [previewable]);
+  const shownFace: BoardFace = previewable && preview !== null ? preview : face;
   const previewing = shownFace !== face;
   const challenges = shownFace === 0 ? faces.light : faces.dark;
+
+  // Only shorten a square's name where the board is actually cramped for it. A 5x5 board hands
+  // every cell far more room than the shortener assumes, so the full name fits it without help.
+  const useShortNames = boardSize > 5;
+  const squareLabel = (c: { name: string; short?: string }) => (useShortNames ? c.short ?? c.name : c.name);
 
   const { marks, toggle: toggleMark, clear: clearMarks } = usePencilMarks(room.code);
 
@@ -247,7 +257,7 @@ export function BattlePhase({
         onToggleMark={toggleMark}
         cellText={(i) => {
           const c = challenges[i];
-          return c ? { label: c.short ?? c.name, title: c.title ?? c.name } : null;
+          return c ? { label: squareLabel(c), title: c.title ?? c.name } : null;
         }}
         cellTint={(i) => {
           const c = challenges[i];
@@ -328,19 +338,53 @@ export function BattlePhase({
       <HostTakeover players={players} onlinePlayerIds={onlinePlayerIds} myPlayerId={myPlayerId} />
 
       {/* The readiness gate. Only while the room is in `prep`, which is the one phase that does not
-          advance on a clock - it waits for every team to say it is here. The board itself is
-          deliberately not rendered anywhere below while this is up: reading it is what this screen
-          IS, and showing the live board underneath a "read the board" prompt let a team start
-          picking it apart - even previewing the far side - before every team had actually said it
-          was ready, which made the gate a formality rather than a beat. */}
+          advance on a clock - it waits for every team to say it is here. Both faces of the board are
+          shown below it, read-only - reading them is what this screen IS - and nothing about the
+          match itself (the clock, the claim log, the roster) exists yet: there is nothing to claim
+          and nothing to say happened until every team has actually said it's ready. */}
       {room.status === "prep" && (
-        <ReadyGate
-          roomId={room.id}
-          myTeam={myTeam}
-          teams={activeTeamsList}
-          teamReady={teamReady}
-          isHost={isHost}
-        />
+        <>
+          <ReadyGate
+            roomId={room.id}
+            myTeam={myTeam}
+            teams={activeTeamsList}
+            teamReady={teamReady}
+            isHost={isHost}
+          />
+
+          {/* Both faces, side by side, read-only. The gate above is what "read the board" asks
+              for, so it has to actually show the board - and both sides of it, since the whole
+              point of a flip board is choosing which one you'd rather be racing on before the
+              race can start on it. Play always opens on the light side (see faceFromClaims - zero
+              flips is face 0), so this is a preview, not a choice of which one goes live. */}
+          <div className="row" style={{ gap: "1rem", width: "100%", justifyContent: "center", flexWrap: "wrap" }}>
+            {(["light", "dark"] as const).map((side) => {
+              const sideFace: BoardFace = side === "light" ? 0 : 1;
+              const sideChallenges = side === "light" ? faces.light : faces.dark;
+              return (
+                <div key={side} data-face={sideFace} style={{ minWidth: 0 }}>
+                  <BoardGrid
+                    boardSize={boardSize}
+                    cellVisual={() => "empty"}
+                    flipCells={flipCells}
+                    disabled
+                    label={`${FACE_LABELS[sideFace]} side`}
+                    cellText={(i) => {
+                      const c = sideChallenges[i];
+                      return c ? { label: squareLabel(c), title: c.title ?? c.name } : null;
+                    }}
+                    cellTint={(i) => {
+                      const c = sideChallenges[i];
+                      return c ? { region: c.region, color: c.color } : null;
+                    }}
+                    maxVh={56}
+                    maxVw={44}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Everything below is the live match - the board, the clock, the layout controls - and it
@@ -370,10 +414,10 @@ export function BattlePhase({
               {FACE_LABELS[shownFace]} side
             </strong>
 
-            {/* Only while claiming is shut. Turning the board by hand mid-race would show a player
-                objectives that are not on the table, which is a way to misread the board rather than
-                to read it. */}
-            {!canClaim && (
+            {/* Only before the race itself opens. Turning the board by hand mid-race - including
+                during a pause - would show a player objectives that are not on the table, which is
+                a way to misread the board rather than to read it. */}
+            {previewable && (
               <button
                 onClick={() => setPreview(previewing ? null : ((face === 0 ? 1 : 0) as BoardFace))}
                 aria-pressed={previewing}

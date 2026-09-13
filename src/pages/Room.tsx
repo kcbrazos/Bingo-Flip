@@ -441,6 +441,9 @@ function WatchBoard({
   );
   const challenges = face === 0 ? faces.light : faces.dark;
 
+  // See the matching note in BattlePhase: a 5x5 board has room enough to skip the shortener.
+  const useShortNames = boardSize > 5;
+
   const visuals = useMemo(() => cellVisuals(claims), [claims]);
   const owners = useMemo(() => cellOwners(claims), [claims]);
   const flipCells = useMemo(() => new Set(room.flip_cells ?? []), [room.flip_cells]);
@@ -457,7 +460,7 @@ function WatchBoard({
           disabled
           cellText={(i) => {
             const c = challenges[i];
-            return c ? { label: c.short ?? c.name, title: c.title ?? c.name } : null;
+            return c ? { label: useShortNames ? c.short ?? c.name : c.name, title: c.title ?? c.name } : null;
           }}
           cellTint={(i) => {
             const c = challenges[i];
