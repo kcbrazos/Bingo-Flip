@@ -1,12 +1,11 @@
 /**
  * Off-site community links, pinned to the bottom of the menu screens.
  *
- * Shared rather than inlined because these appear on both the main menu and the lobby, and a
- * second link is already planned - a "Need the Mod? Download it here!" button, waiting on the mod
- * itself being finished. When that lands, add it here and both screens pick it up.
+ * Shared rather than inlined because these appear on both the main menu and the lobby.
  *
  * Deliberately NOT rendered during placement or battle: a full-width link that navigates away
- * from a live match is a hazard, and nobody mid-game is shopping for a Discord invite.
+ * from a live match is a hazard, and nobody mid-game is shopping for a Discord invite or the
+ * randomizer download.
  */
 export function CommunityLinks() {
   return (
@@ -18,6 +17,14 @@ export function CommunityLinks() {
         background="#5865F2"
       >
         Join Ignite on Discord!
+      </ExternalLink>
+      <ExternalLink
+        href="https://github.com/ignitesouls/AthenaRandomizer"
+        // GitHub's own dark grey, for the same reason the Discord link borrows blurple - it
+        // reads as "this goes to GitHub" before anyone parses the words.
+        background="#24292e"
+      >
+        Bingo Flip uses Athena Randomizer - download it here
       </ExternalLink>
     </div>
   );
