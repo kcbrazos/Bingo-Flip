@@ -1,0 +1,1 @@
+function e(e){let t=new Set;for(let n of e)n.team!==null&&n.team!==void 0&&t.add(n.team);return[...t].sort((e,t)=>e-t)}function t(e,t){let n=e.filter(e=>e.team===t);return n.length===0?null:[...n].sort((e,t)=>{let n=e.team_joined_at??null,r=t.team_joined_at??null;return n===r?e.id.localeCompare(t.id):n===null?1:r===null?-1:n.localeCompare(r)})[0]}export{t as n,e as t};

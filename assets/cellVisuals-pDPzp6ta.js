@@ -1,0 +1,1 @@
+function e(e){let n=t(e),r=new Map;for(let[e,t]of n)r.set(e,t.length>1?`contested`:`claimed`);return r}function t(e){let t=new Map;for(let n of e){if(n.cell_index<0)continue;let e=t.get(n.cell_index);e?e.includes(n.team)||e.push(n.team):t.set(n.cell_index,[n.team])}for(let e of t.values())e.sort((e,t)=>e-t);return t}export{e as n,t};
