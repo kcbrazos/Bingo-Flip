@@ -1,0 +1,196 @@
+/**
+ * The records page.
+ *
+ * Deliberately plainer than the match screen. This is read between matches, sitting still, so it
+ * takes the app's chrome colours and leaves the Erdtree/Shadow face tokens alone entirely - there is
+ * no board here, and nothing to flip.
+ */
+.stats {
+  width: min(960px, 100%);
+  gap: 1.4rem;
+}
+
+/* --- the totals strip ------------------------------------------------------ */
+.stats-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.6rem;
+}
+
+.stats-total {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.stats-total-value {
+  font-family: var(--font-display), serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--accent-bright);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.stats-total-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* --- the table -------------------------------------------------------------- */
+/* Its own scroller, so a narrow screen slides the table rather than the page. */
+.stats-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.stats-table thead th {
+  border-bottom: 1px solid var(--panel-border);
+  font-weight: 500;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.stats-table tbody tr:nth-child(even) {
+  background: #ffffff06;
+}
+
+.stats-rank {
+  width: 2.5rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-name {
+  width: 100%;
+}
+
+.stats-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The headings are the sort control, so they have to look pressable without becoming buttons in a
+   row of labels. Underline on the active one, nothing on the rest until hovered. */
+.stats-sort {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.stats-sort:hover {
+  color: var(--text);
+}
+
+.stats-sort-on {
+  color: var(--accent-bright);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+.stats-sort:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+
+/* --- recent matches ---------------------------------------------------------- */
+.stats-matches {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.stats-match {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 0.55rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.stats-match-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.stats-match-when {
+  margin-left: auto;
+  font-size: 0.75rem;
+}
+
+.stats-match-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.9rem;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The flip count is what makes this game this game, so it is the one chip on the line with a
+   colour. Its absence is coloured too - see the note in Stats.tsx. */
+.stats-flip {
+  color: var(--accent);
+}
+
+.stats-noflip {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.stats-match-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  font-size: 0.8rem;
+  padding-top: 0.15rem;
+}
+
+.stats-won {
+  font-weight: 600;
+}
+
+.stats-won::after {
+  content: " ✦";
+  font-size: 0.7em;
+  vertical-align: 0.2em;
+}
+
+@media (max-width: 620px) {
+  .stats-match-when {
+    margin-left: 0;
+    width: 100%;
+  }
+}

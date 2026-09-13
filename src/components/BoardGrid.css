@@ -1,0 +1,621 @@
+.bg-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: center;
+  max-width: 100%;
+}
+
+.bg-label {
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.bg-grid-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.bg-grid {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  background: var(--board-line);
+  border: 2px solid var(--board-line);
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(217, 164, 65, 0.18), 0 4px 18px rgba(0, 0, 0, 0.45);
+  flex: none;
+  /* Width and height are set to the identical explicit value (not inferred via
+     aspect-ratio) so sizing can't get squeezed by ambiguous flex/block sizing rules -
+     it's always exactly min(--bg-max-vh, --bg-max-vw, a hard cap). Both bounds are plain
+     viewport units, so a caller can claim e.g. "half the screen" via maxVw regardless of
+     how its parent container happens to be sized. */
+  width: min(var(--bg-max-vh, 78vh), var(--bg-max-vw, 92vw), 1600px);
+  height: min(var(--bg-max-vh, 78vh), var(--bg-max-vw, 92vw), 1600px);
+
+  /* Size of the per-square tally chips. Defined here, on the common ancestor, because two
+     unrelated rules need to agree on it: the strip itself and the bottom padding that keeps the
+     square's name from running through it. The floor is what keeps two digits legible on a small
+     board, and is also why that padding can't simply be a percentage of the cell. */
+  --bg-count-font: clamp(7px, calc(var(--bg-cell-font, 11px) * 1.05), 15px);
+}
+
+/* Fill mode: the board takes whatever shape its container has, square or not. Overrides the
+   min(vh, vw, 1600px) sizing above, which exists to keep the board square and can't describe a
+   panel the player has dragged into a rectangle. */
+.bg-wrap-fill {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.bg-grid-scroll-fill {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  /* No horizontal scroll here: the grid is being told to fit, so there is nothing to scroll to. */
+  overflow: hidden;
+}
+
+.bg-grid-fill {
+  width: 100%;
+  height: 100%;
+}
+
+.bg-coord {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(0.6rem, 1.4vh, 0.85rem);
+  /**
+   * Stated, never inherited.
+   *
+   * The gutter tracks are `auto`, so the track's height is the label's line box - and a line box
+   * inherited from an ancestor that set `line-height: 0` is zero tall. The caster's monitor does
+   * exactly that (.cast-preview, to kill the inline-block descender gap), which collapsed the
+   * coordinate rows to nothing and left the glyphs overflowing their own track, clipped top and
+   * bottom by the frame. It was invisible while the labels were small and obvious the moment they
+   * were made large. The OBS source was always fine, which is what pinned it on the preview.
+   */
+  line-height: 1.15;
+  color: var(--text-dim);
+  transition: color 0.1s;
+}
+
+/* Lights up the row/column label the hover shadow is pointing at. */
+.bg-coord-active {
+  color: var(--accent-bright);
+  font-weight: 700;
+}
+
+.bg-tooltip {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 8px));
+  z-index: 50;
+  pointer-events: none;
+  max-width: 260px;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(6, 18, 27, 0.97);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.bg-cell {
+  position: relative;
+  padding: 1px;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--cell);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bg-cell-axis-shadow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+}
+
+.bg-cell-text {
+  /* The first render's estimate only, and overridden by an inline px size from the moment there is
+     a cell to measure - see lib/textFit, which fits each name to the square it's actually in. This
+     line is what a square looks like for the one frame before that measurement exists. */
+  font-size: clamp(7px, calc(var(--bg-cell-font, 11px) * var(--bg-cell-fit, 1)), 17px);
+  /* Not 1.1. Below roughly 1.2 the glyph box is taller than its own line box, so descenders hang
+     outside it and the overflow:hidden below (there for the ellipsis) cuts them off - "Margit" and
+     "Watchdog" lost the tails of their g's. The padding is the same guard for the final line, whose
+     descenders sit right on the clip edge even at a comfortable line-height. */
+  line-height: 1.25;
+  padding-bottom: 0.1em;
+  text-align: center;
+  /* Geometric sans at bold, for open counters that survive being shrunk into a cell. It is a WIDE
+     face though - noticeably wider than the body font - so long names wrap sooner here than they
+     used to. See --font-board for why it isn't self-hosted. */
+  font-family: var(--font-board);
+  font-weight: 700;
+  /* Region tint when the set records one (the boss set does, objectives don't), else the
+     default. See .bg-region-* below. */
+  color: var(--bg-region, var(--cell-text));
+  /* The backstop under the backstop. textFit sizes a name so that no word has to be broken, so
+     this should now only ever fire in a cell too small to hold its longest word at 5px - which on
+     the boss board means a panel dragged smaller than anyone plays at. */
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  max-height: 100%;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+
+  /* Anything that still doesn't fit ends in an ellipsis rather than being sliced through a word.
+     A visible "..." reads as "hover for the rest", which is true; a half-word reads as a bug. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--bg-cell-lines, 5);
+  line-clamp: var(--bg-cell-lines, 5);
+  overflow: hidden;
+}
+
+/**
+ * Where on the map each square is, by colour.
+ *
+ * All seven are light tints rather than saturated hues: the cell behind them is near-black navy
+ * (--cell), so lightness is what carries contrast here, and a "true" red or blue dark enough to
+ * read as that colour would be unreadable at this size. Grouped to match the Region type - the
+ * pairs that share a colour are the ones players travel together.
+ *
+ * Deliberately kept clear of the ownership fill these sit on top of, which is exactly why a claimed
+ * square stops using them (.bg-cell-text-marked).
+ */
+.bg-region-limgrave { --bg-region: #74d68a; }
+.bg-region-liurnia { --bg-region: #62b6f2; }
+.bg-region-caelid { --bg-region: #ef6b6b; }
+.bg-region-altus { --bg-region: #edc75c; }
+/* Neutral rather than the blue-grey of --cell-text, so "grey" reads as a chosen colour next to
+   the others instead of looking like an untinted square. */
+.bg-region-mountaintops { --bg-region: #c8c6c2; }
+.bg-region-underground { --bg-region: #bb8bea; }
+/* Magenta, not the orange it started as. Orange sat ~16 degrees of hue from the Altus gold, and two
+   light warm tints that close are not tellable apart inside a cell - which matters most here, since
+   the DLC is the largest group on the board by some way. The rest of the palette crowds into the
+   warm end (red, gold) and then leaves everything from purple back round to red empty, so this is
+   the one direction that buys separation from gold without landing on top of something else. */
+.bg-region-dlc { --bg-region: #ef82d1; }
+
+/**
+ * The Objectives palette, which is a separate ten from the seven above.
+ *
+ * That set colours by where a boss stands. This one colours by how far into a run a square sits and
+ * whether it's its own trip - see the Region type for why the two vocabularies are kept apart rather
+ * than shared. Ten is more than the seven above, so the hues are spaced deliberately: reading round
+ * the wheel it goes red 3, orange 28, gold 50, lime 95, green 148, cyan 184, blue 217, purple 265,
+ * magenta 316, with no gap under 22 degrees.
+ *
+ * The one pair to watch is gold (post-Altus) against orange (Shadow Keep), which is the 22. They
+ * survive it where the boss board's gold and orange didn't because these two differ in saturation as
+ * well as hue AND can never describe the same trip - one is base game, the other is DLC - so a
+ * misread costs nothing. If it does prove too close in play, move Shadow Keep further red; there is
+ * room between it and Cerulean Coast.
+ */
+.bg-region-prealtus { --bg-region: #2fae66; }
+.bg-region-postaltus { --bg-region: #f0d24a; }
+/* Ice, not the silver-grey the boss board uses for the same mountains: white is spoken for below,
+   and grey is its nearest neighbour. */
+.bg-region-snowfield { --bg-region: #55d9e0; }
+.bg-region-dlcgeneral { --bg-region: #5b9bf5; }
+.bg-region-belurat { --bg-region: #ea7fd0; }
+.bg-region-shadowkeep { --bg-region: #ff8c2b; }
+.bg-region-rauh { --bg-region: #8ee04a; }
+.bg-region-dlcsouth { --bg-region: #ff5a52; }
+/* Combined (C) squares, which take a colour of their own instead of a region - see buildBingoBoard. */
+.bg-region-combined { --bg-region: #a97bf0; }
+/**
+ * "Anywhere": collections and counts that are genuinely not in one place.
+ *
+ * Near-white rather than pure #fff, which .bg-cell-text-marked owns - a resolved square bleaches to
+ * white, and two identical whites would make an untouched general square read as an already-fired
+ * one at a glance. The half-step off is enough to keep them apart while still reading as white next
+ * to nine saturated hues.
+ */
+.bg-region-general { --bg-region: #edf3f7; }
+
+/**
+ * Lifts the name above the marker layer, which is a later grid item and would otherwise paint over
+ * it. Every square carrying anything at all needs this - a result OR a pencil mark - and an
+ * untouched square has no marker to sit under. Same trick the stream overlay uses for the same
+ * reason; see Overlay.css.
+ */
+.bg-cell-text.bg-cell-text-lifted {
+  position: relative;
+  z-index: 3;
+}
+
+/**
+ * A square that's been FIRED AT drops its region colour for white.
+ *
+ * Two things happen to a resolved square that ruin a tinted name: the cell fills with a result
+ * colour, and a marker is drawn over the top.
+ * A green or gold name survives neither. White clears both, and the state is still obvious from
+ * the fill - so the square reads as resolved AND still says what it was, which is the point.
+ *
+ * A pencil mark deliberately does NOT get this. It used to, because one class did both this job and
+ * the z-index lift above, so right-clicking a square to pin a guess also bleached its name - and the
+ * tint is exactly what you're reading when you decide which squares are worth pinning. Nothing about
+ * a pencil mark justifies it either: the star sits in one corner and the cell keeps its own colour,
+ * so there is no result fill for white to rescue the name from.
+ */
+.bg-cell-text.bg-cell-text-marked {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.7);
+}
+
+/* Full lift for a square you can actually fire at. */
+.bg-cell:not(.bg-cell-inert):hover {
+  filter: brightness(1.3);
+}
+
+/**
+ * A square being held down to fire at - see holdToClaimMs in BoardGrid.
+ *
+ * The sweep is the clock: it reaches the far edge at the instant the shot goes, so the wait is
+ * legible as progress rather than as lag. Its duration is the player's chosen hold length, handed
+ * in as --bg-hold-ms because that same number is what the timer in JS is counting.
+ *
+ * An animation rather than a transition. A transition needs the element to have been painted in its
+ * start state and changed in a later frame; this class arrives on the same frame the cell first
+ * wants to be filling, so a transition would simply jump to the end.
+ *
+ * z-index 2 sits it under the square's name (lifted to 3 while held) and under the result markers
+ * at 4 - the point is to read the boss you are about to commit to, so nothing may wash over it.
+ */
+.bg-cell-holding {
+  /* Marks the target itself, not just its progress: on a dense board the fill alone reads as
+     ambient motion, and this is the line that says "this square". */
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.bg-cell-holding::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  opacity: 0.45;
+  transform-origin: left center;
+  animation: bg-hold-fill var(--bg-hold-ms, 400ms) linear forwards;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes bg-hold-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/**
+ * Holding still has to be possible for someone who can't have the motion, so the fill is replaced
+ * rather than dropped: the outline above already says which square, and this says "held" without
+ * anything sweeping. It costs the progress reading, which is the part that can't be kept.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .bg-cell-holding::after {
+    animation: none;
+    transform: scaleX(1);
+    opacity: 0.28;
+  }}
+
+/**
+ * A square that can't be clicked still highlights, just more quietly.
+ *
+ * These used to carry the HTML `disabled` attribute, and Chrome fires NO mouse events on a disabled
+ * button - so a board you couldn't fire at (your own defense grid, the post-match recap, or any
+ * board during the prep countdown) had no cell highlight, no row/column shading and no tooltip,
+ * because all three hang off the same onMouseEnter. Inertness is a class now; the click handler
+ * does the refusing.
+ */
+.bg-cell-inert {
+  cursor: default;
+}
+
+.bg-cell-inert:hover {
+  filter: brightness(1.15);
+}
+
+.bg-empty {
+  background: var(--cell);
+}
+
+/**
+ * A square wearing its own challenge's colour, for the boards with no room to write the name.
+ *
+ * -- Why only an untouched square ----------------------------------------------------------------
+ *
+ * Scoped to .bg-empty, so a claimed or contested square keeps its own fill
+ * untouched. Those fills are the board's actual news, and they are already the loudest thing on it
+ * by design (see the note below on why a resolved square colours its whole self) - a tint competing
+ * with them would be trading the answer to "what happened here" for the answer to "which region was
+ * this", which is the wrong way round. The class still lands on those squares, carrying the colour
+ * ready for a fill that is simply not being drawn.
+ *
+ * -- Why 20% -------------------------------------------------------------------------------------
+ *
+ * These colours were picked to be read as TEXT on a dark cell (see .bg-region-* above), so they are
+ * light and saturated - at full strength as a fill they would out-shout the objective NAMES drawn
+ * over them, which are the reason anyone is looking at this board. Mixed a fifth of the way into
+ * the normal cell they land as a dark wash: enough that the regions separate into visible groups
+ * and a colour can be matched against the key, not enough to make the board read as a bag of sweets
+ * or to cost the names their contrast. Raise it and the text starts to lose.
+ *
+ * Named rather than written into the mix, because it is the one number here that can only really be
+ * judged on a live board: set --bg-tint on .bg-grid (or on one board's wrapper) to move every
+ * square at once without touching the rule.
+ */
+.bg-cell-tinted.bg-empty {
+  background: color-mix(in srgb, var(--bg-region, transparent) var(--bg-tint, 20%), var(--cell));
+}
+
+/**
+ * A resolved square colors its whole self, not just the middle of it.
+ *
+ * The markers alone were too quiet: on a ten-by-ten board carrying a boss name in every square, a
+ * small icon in the center of a cell that is otherwise the same navy as its ninety-nine neighbours
+ * doesn't read at a glance - which is what players kept reporting. The fill is what you see from
+ * across the room; the marker is what tells you which of the three it was.
+ *
+ * There is one fill now where Battleship had four, because there is one thing to say: this square
+ * belongs to somebody. WHO is carried by the colour, which the component passes in as --bg-owner -
+ * a flat team colour for one holder, or hard-edged bands for several.
+ */
+.bg-claimed,
+.bg-contested {
+  background: var(--bg-owner, var(--cell));
+}
+
+/* Darkened over the top, so a team colour bright enough to identify across a room is still dark
+   enough to read a square name off. Applied as a layer rather than by dimming the colour itself,
+   so the colour a player matches to the roster is the actual team colour. */
+.bg-claimed::after,
+.bg-contested::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #0009;
+  pointer-events: none;
+}
+
+/**
+ * A flip square, while it can still turn the board.
+ *
+ * Three signals, because this is the one thing on the board worth crossing a room to see: a gilded
+ * inset border, a glow rising from the bottom edge, and the arrows drawn in the mark layer. All
+ * three take --flip-mark, so they turn from Erdtree gold to Messmer's ember with the face.
+ */
+.bg-cell-flip {
+  box-shadow: inset 0 0 0 1px var(--flip-mark);
+}
+
+.bg-cell-flip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 120%, var(--flip-mark) -40%, transparent 62%);
+  opacity: 0.5;
+  pointer-events: none;
+  transition: background 420ms ease;
+}
+
+.flip-mark {
+  position: absolute;
+  top: 6%;
+  right: 6%;
+  width: 22%;
+  height: 22%;
+  color: var(--flip-mark);
+  transition: color 420ms ease;
+}
+
+.bg-cell-mark-layer {
+  position: relative;
+  pointer-events: none;
+}
+
+/**
+ * The attribution ring: which team holds this square, in that team's own colour.
+ *
+ * A filled box with its own middle masked out, rather than a `border`. Two things need that. A
+ * border can only be one colour per edge, so two teams sharing a square could not split it; and a
+ * border's width is a fixed length, which on a board that runs from a 38px cell on a phone to a
+ * 90px one in a 1000px browser source would be a hairline at one end and a frame at the other.
+ * Masking a padded box leaves the padding to set the thickness, and a percentage padding resolves
+ * against the cell's WIDTH on all four sides - so the ring is the same number of pixels all the way
+ * round even on the match canvas, where a square can be dragged out of square. The floor keeps it
+ * from vanishing entirely on the smallest boards.
+ *
+ * z-index 2: above the square's fill, below the name (3) and the tallies (4). The ring is the answer
+ * to "whose?", which is a question you ask after reading the square - it must never be what you read
+ * INSTEAD of the square.
+ *
+ * The paint itself comes from the board - a flat colour or a conic gradient, see ringPaint.
+ */
+.bg-claim-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: max(2px, 6.5%);
+  background: var(--bg-ring-paint);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  /* The pair that cuts the middle out: the standard property and the WebKit one, which takes a
+     different keyword for the same operation. OBS's browser source is Chromium and honours both. */
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  /* A dark hairline just inside the ring's outer edge, so a team colour still reads as a ring where
+     it meets a bright square fill or a neighbour's ring across the 2px grid gap. Inset only: an
+     outer shadow falls outside the border box, which is exactly what the mask above clips away. */
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+/* Right-click pencil mark: a client-local "I reckon something's here" pin. Deliberately reads
+   as an annotation rather than a result, so it can't be confused with a real hit. */
+/**
+ * The "I want this square" mark, toggled with right-click.
+ *
+ * Top RIGHT, and a star rather than the ring it used to be: the ring sat top-left where the hit and
+ * the ruled-out cross is drawn, so on a busy board the two read as the same kind of thing. A star in the
+ * opposite corner is unmistakably an annotation rather than a result.
+ *
+ * Drawn as a mask so the icon takes the accent color and stays legible on any cell state, the same
+ * trick the old sprite markers used.
+ */
+.bg-pencil-mark {
+  position: absolute;
+  top: 5%;
+  right: 5%;
+  width: 24%;
+  height: 24%;
+  min-width: 9px;
+  min-height: 9px;
+  background: var(--accent);
+  -webkit-mask-image: var(--bg-star-icon);
+  mask-image: var(--bg-star-icon);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  filter: drop-shadow(0 0 3px rgba(217, 164, 65, 0.75));
+}
+
+/**
+ * Markers are sized with an explicit width AND height rather than `inset`.
+ *
+ * An <svg> is a replaced element, and a replaced element's `auto` size comes from its own intrinsic
+ * ratio - NOT from opposing offsets. So `inset: 3%` pinned the left edge and then let the 1:1
+ * viewBox decide the height. On a square cell the two agree and nothing looks wrong; the moment a
+ * board is dragged out of square on the match canvas they diverge, because the marker is still
+ * sizing itself off the cell's WIDTH alone. At a 105x15 cell the burst rendered 99x99 - six rows
+ * tall, spilling over its neighbours - and at 19x76 it was a small dot in a tall cell.
+ *
+ * A percentage width and a percentage height each resolve against their own axis of the cell, so
+ * the box tracks both. The default preserveAspectRatio ("xMidYMid meet") then scales the artwork
+ * uniformly inside it: centered, never distorted, and never larger than the square it belongs to.
+ */
+/**
+ * The wheel-driven tallies, along the bottom edge of a square.
+ *
+ * The bottom rather than a corner because there can be several: one chip per crewmate who has
+ * counted this square, and a team splitting an objective needs to see who has done how much of it.
+ * Corners hold one thing each and are already spoken for - the pencil star owns the top right, the
+ * result markers own the middle.
+ *
+ * z-index 4 puts these above the square's name, which is itself lifted to 3 when annotated. That
+ * order is deliberate: the name is fixed and known, the tallies are the thing that just changed.
+ * Sized from --bg-cell-font, the same measure the names use, so they shrink with the board.
+ */
+.bg-count-strip {
+  position: absolute;
+  left: 2%;
+  right: 2%;
+  bottom: 3%;
+  z-index: 4;
+  display: flex;
+  justify-content: center;
+  /* Wide on purpose. These are bare digits now, and "9 4 2" set tightly reads as nine hundred and
+     forty-two - the gap is the only thing separating one crewmate's tally from the next. */
+  gap: 0.7em;
+  overflow: hidden;
+  pointer-events: none;
+  font-size: var(--bg-count-font);
+  line-height: 1.15;
+}
+
+/**
+ * One tally. A bare number - see SquareCount for why there is no name on it.
+ *
+ * No plate and no border. Three bordered chips were three boxes competing with the square's own
+ * frame for a row of single digits, and the borders cost more width than the digits did. Legibility
+ * over a boss name or a hit fill comes from a heavy text-shadow instead, which is the same thing
+ * .bg-cell-text does and costs no space at all.
+ *
+ * min-width holds a single digit to the width of a double so a row doesn't shuffle sideways when
+ * somebody counts past nine.
+ */
+.bg-count-num {
+  min-width: 1em;
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 4px rgba(0, 0, 0, 0.9);
+}
+
+/* Yours, in the accent. With no names and no borders, this and first position are the entire answer
+   to "which one is mine" - and it's the only one you can change. */
+.bg-count-num-mine {
+  color: var(--accent-bright);
+}
+
+/**
+ * Lifts the centred square name clear of the tallies below it, rather than letting the two overlap.
+ *
+ * Derived from --bg-count-font rather than being a percentage of the cell, because the strip does
+ * NOT scale with the cell all the way down - its font clamps at 7px so two digits stay readable,
+ * which means on a small board the strip is a bigger share of the square than on a large one. A
+ * flat 18% was right at 56px cells and let the name run straight through the numbers at 38px.
+ *
+ * 1.5, down from the 1.9 the bordered chips needed - a bare digit is a line box and nothing else.
+ */
+.bg-cell-has-counts {
+  padding-bottom: calc(var(--bg-count-font) * 1.5);
+}
+
+/* What every mark drawn on a square shares. One of them now, where Battleship had eleven. */
+.ruled-mark {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/**
+ * A square a player has written off, crossed out by hand - see usePencilMarks. The board makes no
+ * deductions of its own any more, because there is nothing hidden on it to deduce.
+ *
+ * Drawn under the square's name rather than over it - the mark layer already sits below the lifted
+ * text - so a crossed-out square still says what it asked for. That matters: "we've ruled out
+ * Margit" is a thing a team says out loud, and it can't say it off a square it can no longer read.
+ */
+.ruled-mark {
+  top: 8%;
+  left: 8%;
+  width: 84%;
+  height: 84%;
+  stroke: var(--danger, #d05a5a);
+  stroke-width: 7;
+  stroke-linecap: round;
+  opacity: 0.85;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+}

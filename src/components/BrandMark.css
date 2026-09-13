@@ -1,0 +1,136 @@
+/**
+ * The wordmark, and the loading screen built around it.
+ *
+ * Everything here is sized in `em` so the caller sets one font-size and the whole mark - tracking,
+ * rule, glow - scales with it. That is the only reason the hero and the loading screen can share a
+ * component without their proportions drifting apart.
+ */
+.brand-word {
+  display: inline-block;
+  position: relative;
+  font-family: var(--font-display), Palatino, Georgia, serif;
+  font-weight: 700;
+  /* Small caps rather than uppercase: the second letter of each word keeps a capital's shape at a
+     smaller size, which is what gives classical Roman lettering its rhythm. `text-transform:
+     uppercase` flattens that into a row of identical heights. */
+  font-variant-caps: small-caps;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  /* The trailing letter-space would otherwise hang off the right and push the mark off centre. */
+  padding-left: 0.14em;
+  white-space: nowrap;
+  /* Centres the mark when it is a flex child, which is how both the lobby and the loading screen
+     place it - an inline-block in a column flex otherwise sits hard against the leading edge. */
+  align-self: center;
+  /* h1 carries a gold text-shadow site-wide (see index.css). Shadows paint from the glyph outline
+     regardless of fill, so on transparent clipped text it prints a second, blurrier wordmark
+     behind this one. The glow below is the deliberate version of that effect. */
+  text-shadow: none;
+
+  /**
+   * Gilt, lit from above.
+   *
+   * A vertical gradient rather than a flat colour, because struck metal is bright where it catches
+   * the light and deep in the shadow under each stroke - that single fact is most of why gold
+   * lettering reads as gold rather than as yellow. The last stop is a bronze rather than a darker
+   * gold, so the feet of the letters warm toward the ember the board flips to.
+   */
+  background: linear-gradient(
+    180deg,
+    #fbf0cd 0%,
+    #f2d98a 26%,
+    #d9b45b 58%,
+    #b8823a 84%,
+    #9c5f2a 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+
+  /**
+   * The glow, as a filter rather than a text-shadow.
+   *
+   * `text-shadow` paints behind the element's background, and the background here IS the lettering -
+   * so a shadow would be hidden under the gradient it is meant to sit behind. A drop-shadow filter
+   * operates on the rendered result, clipped glyphs included, which is the only thing that works
+   * once the fill is a clipped gradient.
+   */
+  filter: drop-shadow(0 0 0.5em #d9b45b55) drop-shadow(0 1px 0.06em #0009);
+}
+
+/**
+ * The gap between the words.
+ *
+ * A margin rather than a space character: a space would take the tracking too and open to nearly
+ * half an em, which breaks the mark into two words. This is the one place the rhythm is set by hand.
+ */
+.brand-word-b {
+  margin-left: 0.34em;
+}
+
+/**
+ * The rule beneath, fading out at both ends.
+ *
+ * Elden Ring's own lettering sits on a line, and a hairline under a wide-tracked serif is most of
+ * what makes a word read as a wordmark rather than as a heading. It fades rather than stopping, so
+ * it reads as struck into the page instead of drawn on it.
+ *
+ * Inset past the padding above so it centres under the letters rather than under the hanging
+ * letter-space.
+ */
+.brand-word::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0.14em;
+  bottom: -0.34em;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #d9b45b 22%, #f2d98a 50%, #d9b45b 78%, transparent);
+  opacity: 0.7;
+}
+
+/* Where the mark is a bystander: no rule, no glow, and a touch of the page showing through. The
+   lettering stays gilt, because a grey wordmark reads as disabled rather than as quiet. */
+.brand-word-quiet {
+  filter: none;
+  opacity: 0.75;
+  letter-spacing: 0.1em;
+}
+
+.brand-word-quiet::after {
+  display: none;
+}
+
+.brand-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem 0;
+  text-align: center;
+}
+
+/* The pulse is the only thing on these screens that says "still working" rather than "stopped".
+   It rides on opacity alone: transforms would move the mark around while the page behind it is
+   still settling, and this has to sit still enough to read. */
+.brand-loading .brand-word {
+  animation: brand-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes brand-pulse {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* Anyone who has asked for less motion gets the mark held at a steady middle opacity rather than
+   at either end of the pulse, so it looks deliberate instead of stuck mid-fade. */
+@media (prefers-reduced-motion: reduce) {
+  .brand-loading .brand-word {
+    animation: none;
+    opacity: 0.7;
+  }
+}

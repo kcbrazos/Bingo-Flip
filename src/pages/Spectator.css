@@ -1,0 +1,56 @@
+/**
+ * The spectator screen, sized to the window rather than to its contents.
+ *
+ * It used to be an ordinary stack: a clock, a mode switcher, boards capped at `calc(100vh - 11rem)`
+ * and a couple of buttons. Those add up to more than the viewport - the boards alone claimed all
+ * but 11rem of it - so the page scrolled, and the thing that scrolled off the top was the clock.
+ * A caster narrating "they're twelve minutes in" was the one person who couldn't see the time.
+ *
+ * So the page is a fixed-height column now: a bar that keeps everything you read, and a stage that
+ * takes exactly what's left. The boards are measured into the stage (see boardSideFor) rather than
+ * guessing at the chrome in vh, which is what makes it fit at any window size instead of at the one
+ * the constant was tuned on.
+ */
+.spectate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  /* #root's own 2.8rem top / 0.75rem bottom padding, which sits inside this budget. */
+  height: calc(100vh - 3.55rem);
+  min-height: 0;
+}
+
+.spectate-bar .error-text {
+  font-size: 0.7rem;
+}
+
+/* The live clock, flattened into the bar. Digits stay tabular so the bar doesn't twitch each second. */
+.spectate-clock {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex: none;
+}
+
+.spectate-clock-phase {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+}
+
+.spectate-clock-time {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 900px) {
+  /* Below this width the layout gives up on fitting: a phone can't show two boards and a bar at a
+     readable size, and a squashed board is worse than a scrollbar. */
+  .spectate {
+    height: auto;
+  }}

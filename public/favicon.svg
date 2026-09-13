@@ -1,0 +1,63 @@
+<!--
+  Tab icon: a ring that turns over.
+
+  Two arcs chasing each other, each ending in an arrowhead - the Uno Flip gesture, and at a glance
+  the one thing this product does. The top arc is Erdtree gold and the bottom is Messmer's ember,
+  taken from the tokens the board actually flips between (see index.css). Nobody clocks that at 16px;
+  what they get instead is a mark that is warm on one side and hot on the other.
+
+  == On the Elden Ring arc ================================================
+  A concentric arc riding over the ring was tried twice and cut both times. At the same weight and
+  colour as the ring's own top arc it read as a wifi symbol; extended into a 240 degree cradle it
+  stopped doing that and became a horseshoe, but by then the icon carried three concentric bands, and
+  at 16px they collapsed into an indistinct gold blob with the arrows gone entirely. Rendered at tab
+  size and looked at, rather than reasoned about.
+
+  Three concentric bands do not survive a 16px grid. So the emblem is referenced in the palette and
+  the ground rather than in the geometry, and the geometry spends every pixel it has on the one idea
+  that has to survive: that this thing turns around.
+
+  == Sizing ================================================
+  Drawn for 16px first, not scaled down from something pretty. The 9-unit stroke on this 64 grid is
+  about 2.2 rendered pixels, and the arrowheads are deliberately blunt - they are the entire
+  difference between this and a plain broken circle, and a delicate head is a smudge at tab size.
+
+  The rounded plate is deliberate rather than a transparent silhouette: browser tab bars are light in
+  some themes and dark in others, and a bare gold ring disappears against one of them. The plate
+  guarantees contrast either way, and it is the app's own ground rather than a neutral - green-black,
+  lifted at the top exactly as the page is.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Bingo Flip">
+  <defs>
+    <!-- The app's background: lit from above, black at the foot. -->
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#17251b"/>
+      <stop offset="1" stop-color="#0b1410"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="13" fill="url(#ground)"/>
+
+  <!--
+    The ring, as two arcs with a gap at each side. Butt caps, not round: each arc runs into its own
+    arrowhead, and a rounded end would bulge past the triangle's base.
+
+    Both sweep clockwise - the upper from lower-left over the top, the lower from lower-right under
+    the bottom - so the mark is rotationally symmetric and reads the same upside down, which is what
+    a flip symbol ought to do.
+  -->
+  <g fill="none" stroke-width="9">
+    <path d="M16.0 26.2 A17 17 0 0 1 48.0 26.2" stroke="#f2d98a"/>
+    <path d="M48.0 37.8 A17 17 0 0 1 16.0 37.8" stroke="#e0521f"/>
+  </g>
+
+  <!--
+    Each head sits on its arc's leading end, aimed along the tangent, and its base is deliberately
+    WIDER than the stroke - outer corner at radius 24 against the ring's 21.5, inner at 10 against
+    12.5. An earlier pass sized the base to the stroke, which tucked both heads inside the ring's
+    own outline: at 16px the mark was a plain two-tone circle and the arrows had disappeared. The
+    heads have to break the circle to be seen breaking it.
+  -->
+  <path d="M51.1 34.7 L40.4 25.8 L53.5 21.0 Z" fill="#f2d98a"/>
+  <path d="M13.0 29.4 L23.6 38.2 L10.5 43.0 Z" fill="#e0521f"/>
+</svg>

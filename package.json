@@ -1,0 +1,41 @@
+{
+  "name": "bingo-flip",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Lockout bingo where a few squares flip the board onto a second set of objectives. Built for tournament play.",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "dev": "vite",
+    "dev:local": "vite --mode localdb",
+    "local:up": "npx --yes supabase start",
+    "local:reset": "npx --yes supabase db reset",
+    "local:functions": "npx --yes supabase functions serve",
+    "local:down": "npx --yes supabase stop",
+    "local:env": "node scripts/local-env.mjs",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint src scripts",
+    "check:functions": "deno check --node-modules-dir=auto supabase/functions/*/index.ts",
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist -m \"deploy: %npm_package_version%\"",
+    "check:db": "node scripts/check-match.mjs",
+    "check": "node --experimental-strip-types scripts/check-flip.ts && node --experimental-strip-types scripts/check-square-names.ts && node --experimental-strip-types scripts/check-text-fit.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.8",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "gh-pages": "^6.3.0",
+    "oxlint": "^1.71.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
+  }
+}
