@@ -25,6 +25,7 @@ import { useFlipOdds } from "../hooks/useFlipOdds";
 import { OddsPanel } from "../components/OddsPanel";
 import { formatDuration } from "../lib/matchTime";
 import { useCastScreens } from "../hooks/useCastScreens";
+import { useWatchingWith } from "../hooks/useWatchingWith";
 import { useCasterAux } from "../lib/castAux";
 import {
   useCastPublisher,
@@ -139,6 +140,28 @@ export function CasterControl() {
   /** The player-stream boxes and how far behind each is running - see lib/castAux. */
   const aux = useCasterAux(code);
   const screens = useCastScreens(state.players);
+
+  /**
+   * Same self-declared affiliation a spectator can set on the room page - see useWatchingWith.
+   * Shared by room code, so a caster who has already declared one there opens this desk already
+   * restricted, rather than getting a peek here they gave up on the other screen.
+   *
+   * A caster is trusted to be neutral by the nature of the job, which is why the peek below has
+   * always been unconditional - but "trusted to be neutral" and "actually is" are not the same
+   * thing when the person running the desk is also somebody's teammate or coach, and this is the
+   * same honesty switch a spectator gets rather than a second, different feature.
+   */
+  const [watchTeam, setWatchTeam] = useWatchingWith(code);
+  const neutral = watchTeam === null || !teams.includes(watchTeam);
+  useEffect(() => {
+    if (watchTeam !== null && !teams.includes(watchTeam)) setWatchTeam(null);
+  }, [watchTeam, teams, setWatchTeam]);
+  // Declaring a side gives up any peek already in flight - both here and on whatever the desk is
+  // currently publishing, so the broadcast can't keep showing a face the desk itself now refuses
+  // to look at.
+  useEffect(() => {
+    if (!neutral) setView((v) => (v.previewFace === null ? v : { ...v, previewFace: null }));
+  }, [neutral]);
 
   /**
    * Nothing goes down the wire but framing.
@@ -285,10 +308,11 @@ export function CasterControl() {
   const faces = facesForRoom(room.id, boardSize * boardSize, room.square_set, room.seed, room.custom_square_set);
   // A peek outranks the match's real face for which NAMES the monitor (and the driven source) show -
   // see `previewFace` on CastView. Ownership is untouched: a peek changes what an unclaimed square is
-  // called, never who holds it.
-  const shownFace = view.previewFace ?? state.face;
+  // called, never who holds it. Ignored entirely once an affiliation is declared - the effect above
+  // already clears it, this is the belt to that braces for the one render in between.
+  const shownFace = neutral ? (view.previewFace ?? state.face) : state.face;
   const challenges = shownFace === 0 ? faces.light : faces.dark;
-  const peeking = view.previewFace !== null && view.previewFace !== state.face;
+  const peeking = neutral && view.previewFace !== null && view.previewFace !== state.face;
   /** Whether the squares may be named yet - see lib/overlayReveal.ts. */
   const revealed = squaresRevealed(room.status, battlePhase);
 
@@ -395,22 +419,60 @@ export function CasterControl() {
         </span>
         {/* Peek: look at the other face's objectives without touching the match. Nothing on a
             bingo board is hidden, so this is safe to leave on stream - see `previewFace`. It only
-            ever changes which NAMES the unclaimed squares show; ownership never moves. */}
-        <div className="row" style={{ gap: "0.25rem" }} title="Look at a face's objectives without changing the match">
-          {(["live", 0, 1] as const).map((f) => {
-            const active = f === "live" ? view.previewFace === null : view.previewFace === f;
-            return (
-              <button
-                key={String(f)}
-                className={active ? "primary" : ""}
-                style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem" }}
-                onClick={() => set({ previewFace: f === "live" ? null : (f as BoardFace) })}
-              >
-                {f === "live" ? "Live" : FACE_LABELS[f]}
-              </button>
-            );
-          })}
+            ever changes which NAMES the unclaimed squares show; ownership never moves. Withdrawn
+            the instant an affiliation is declared below. */}
+        {neutral && (
+          <div className="row" style={{ gap: "0.25rem" }} title="Look at a face's objectives without changing the match">
+            {(["live", 0, 1] as const).map((f) => {
+              const active = f === "live" ? view.previewFace === null : view.previewFace === f;
+              return (
+                <button
+                  key={String(f)}
+                  className={active ? "primary" : ""}
+                  style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem" }}
+                  onClick={() => set({ previewFace: f === "live" ? null : (f as BoardFace) })}
+                >
+                  {f === "live" ? "Live" : FACE_LABELS[f]}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {/* Same self-declared honesty switch as the room's spectator view - see useWatchingWith.
+            Sharing its storage key means declaring (or clearing) one here is the same declaration
+            there, on this browser, for this room. */}
+        <div className="row" style={{ gap: "0.25rem" }} title="Declare a side to give up the peek above - see the note on useWatchingWith">
+          <span className="muted" style={{ fontSize: "0.72rem" }}>
+            with:
+          </span>
+          <button
+            className={neutral ? "primary" : ""}
+            style={{ fontSize: "0.72rem", padding: "0.1rem 0.45rem" }}
+            onClick={() => setWatchTeam(null)}
+          >
+            neutral
+          </button>
+          {teams.map((t) => (
+            <button
+              key={t}
+              className={watchTeam === t ? "primary" : ""}
+              style={{
+                fontSize: "0.72rem",
+                padding: "0.1rem 0.45rem",
+                borderColor: watchTeam === t ? teamHex(t) : undefined,
+                color: watchTeam === t ? teamHex(t) : undefined,
+              }}
+              onClick={() => setWatchTeam(t)}
+            >
+              {teamName(t)}
+            </button>
+          ))}
         </div>
+        {!neutral && (
+          <span className="muted" style={{ fontSize: "0.78rem" }}>
+            watching with {teamName(watchTeam)} - live face only
+          </span>
+        )}
         {peeking && (
           <span className="muted" style={{ fontSize: "0.78rem" }}>
             peeking - the match is still on {FACE_LABELS[state.face]}

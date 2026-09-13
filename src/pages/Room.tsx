@@ -31,6 +31,7 @@ import { archiveMatch } from "../lib/stats";
 import { MatchClock } from "../components/MatchClock";
 import { LeaveMatchButton } from "../components/LeaveMatchButton";
 import { cellVisuals, cellOwners } from "../lib/cellVisuals";
+import { useWatchingWith } from "../hooks/useWatchingWith";
 import {
   completedLines,
   exhaustion,
@@ -530,24 +531,110 @@ function SpectatorView({
     return (room.flip_cells ?? []).filter((c) => !held.has(c)).length;
   }, [room.flip_cells, claims]);
 
+  const [watchTeam, setWatchTeam] = useWatchingWith(room.code);
+  // A team that left the room (its last player quit or switched off it) is not a team you can
+  // watch WITH any more - fall back to neutral rather than leaving the view stuck locked to a
+  // side nobody is actually playing.
+  const neutral = watchTeam === null || !activeTeamsList.includes(watchTeam);
+  useEffect(() => {
+    if (watchTeam !== null && !activeTeamsList.includes(watchTeam)) setWatchTeam(null);
+  }, [watchTeam, activeTeamsList, setWatchTeam]);
+
+  /**
+   * Free look at either face - see useWatchingWith. Reset the instant an affiliation is declared:
+   * from there this view shows exactly what that team sees, which is the live face and nothing
+   * else, the same restriction BattlePhase puts on an actual player.
+   */
+  const [previewFace, setPreviewFace] = useState<BoardFace | null>(null);
+  useEffect(() => {
+    if (!neutral) setPreviewFace(null);
+  }, [neutral]);
+  const shownFace: BoardFace = neutral && previewFace !== null ? previewFace : face;
+  const peeking = shownFace !== face;
+
   return (
     <div className="stack" style={{ alignItems: "center", width: "100%", gap: "0.8rem" }}>
       <HostTakeover players={players} onlinePlayerIds={onlinePlayerIds} myPlayerId={myPlayer.id} />
 
-      <div className="row" style={{ gap: "0.6rem", alignItems: "baseline", fontSize: "0.85rem" }} data-face={face}>
+      <div
+        className="row"
+        style={{ gap: "0.6rem", alignItems: "baseline", fontSize: "0.85rem", flexWrap: "wrap" }}
+        data-face={shownFace}
+      >
         <span className="badge">watching</span>
         <strong style={{ color: "var(--board-glow)", letterSpacing: "0.08em" }}>
-          {FACE_LABELS[face]} side
+          {FACE_LABELS[shownFace]} side
         </strong>
         <span className="muted">
           {flipsLeft} flip square{flipsLeft === 1 ? "" : "s"} left
         </span>
+
+        {/* Nothing on a bingo board is hidden, so a spectator riding on nobody's result may freely
+            read ahead - the same peek the caster desk already offers on stream. Withdrawn the
+            moment an affiliation is declared below. */}
+        {neutral && (
+          <div className="row" style={{ gap: "0.25rem" }} title="Look at a face's objectives without changing the match">
+            {(["live", 0, 1] as const).map((f) => {
+              const active = f === "live" ? previewFace === null : previewFace === f;
+              return (
+                <button
+                  key={String(f)}
+                  className={active ? "primary" : undefined}
+                  style={{ fontSize: "0.72rem", padding: "0.1rem 0.45rem" }}
+                  onClick={() => setPreviewFace(f === "live" ? null : (f as BoardFace))}
+                >
+                  {f === "live" ? "Live" : FACE_LABELS[f]}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {peeking && (
+          <span className="muted" style={{ fontSize: "0.75rem" }}>
+            peeking - really on {FACE_LABELS[face]}
+          </span>
+        )}
       </div>
+
+      {/* Declaring a side is what gives up the peek above - see useWatchingWith for why. */}
+      <div className="row" style={{ gap: "0.4rem", flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
+        <span className="muted" style={{ fontSize: "0.75rem" }}>
+          Watching with:
+        </span>
+        <button
+          className={neutral ? "primary" : undefined}
+          style={{ fontSize: "0.72rem", padding: "0.1rem 0.5rem" }}
+          onClick={() => setWatchTeam(null)}
+        >
+          Neutral
+        </button>
+        {activeTeamsList.map((t) => (
+          <button
+            key={t}
+            className={watchTeam === t ? "primary" : undefined}
+            style={{
+              fontSize: "0.72rem",
+              padding: "0.1rem 0.5rem",
+              borderColor: watchTeam === t ? teamHex(t) : undefined,
+              color: watchTeam === t ? teamHex(t) : undefined,
+            }}
+            onClick={() => setWatchTeam(t)}
+            title={`See only what ${teamName(t)} sees - no reading ahead on the other face`}
+          >
+            {teamName(t)}
+          </button>
+        ))}
+      </div>
+      {!neutral && (
+        <span className="muted" style={{ fontSize: "0.75rem", textAlign: "center" }}>
+          Watching with {teamName(watchTeam)} - seeing only the live face, same as they do.
+        </span>
+      )}
 
       <WatchBoard
         room={room}
         claims={claims}
-        face={face}
+        face={shownFace}
         players={players}
         activeTeamsList={activeTeamsList}
       />
