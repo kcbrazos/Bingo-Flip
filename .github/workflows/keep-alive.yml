@@ -30,16 +30,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Query the REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          # An unset secret expands to "", which makes curl die with exit 3 (URL malformed)
+          # before it prints anything useful. Say what's actually wrong instead.
+          for name in SUPABASE_URL SUPABASE_ANON_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository secret $name is not set (Settings > Secrets and variables > Actions)."
+              exit 1
+            fi
+          done
+
+          # Tolerate a trailing slash or stray whitespace/CR from pasting the secrets.
+          base=$(printf '%s' "$SUPABASE_URL" | tr -d '[:space:]')
+          base="${base%/}"
+          key=$(printf '%s' "$SUPABASE_ANON_KEY" | tr -d '[:space:]')
+
           # A genuine PostgREST read - HEAD requests and unauthenticated pings don't reliably
           # register as activity. `rooms` is public-select, so the anon key is enough.
-          code=$(curl -s -o /tmp/out -w '%{http_code}' \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/rooms?select=id&limit=1" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+          code=$(curl -s -o /tmp/out -w '%{http_code}' --retry 3 --retry-delay 5 \
+            "$base/rest/v1/rooms?select=id&limit=1" \
+            -H "apikey: $key" \
+            -H "Authorization: Bearer $key") || code="curl-exit-$?"
 
           echo "HTTP $code"
-          cat /tmp/out
+          cat /tmp/out 2>/dev/null || true
 
           # Fail loudly on anything unexpected. A silently-failing keep-alive is worse than none
           # at all: you'd believe you were covered right up until the project paused.
