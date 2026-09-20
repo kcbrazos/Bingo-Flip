@@ -1,1 +1,0 @@
-import{p as e}from"./index-DanCaK4h.js";function t(t,n,r){return t.map(t=>{let i=n.find(e=>e.id===t.player_id),a=r[t.face]??r[0];return{key:t.id,at:t.created_at,team:t.team,who:i?.nickname??e(t.team),cellIndex:t.cell_index,objective:a[t.cell_index]?.short??a[t.cell_index]?.name??``,flipped:t.flipped,face:t.face}}).sort((e,t)=>t.at.localeCompare(e.at))}export{t};
